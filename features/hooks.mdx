@@ -1,0 +1,274 @@
+---
+title: "Hooks"
+description: "Run shell commands in response to server events such as connections, stream state changes, and recording activity."
+keywords: ["hooks", "runOnConnect", "runOnReady", "runOnRead", "runOnDemand", "webhooks", "events", "automation"]
+---
+
+Hooks let you run external commands when specific events occur in MediaMTX. Use them to send webhook notifications, trigger FFmpeg pipelines, log events, or integrate with external systems.
+
+All hook settings accept a shell command string. The command is run in a subprocess and receives event details through environment variables.
+
+## Connection hooks
+
+Connection hooks fire at the server level, for any protocol.
+
+<AccordionGroup>
+  <Accordion title="runOnConnect">
+
+Runs when a client connects to the server. The process is terminated with SIGINT when the client disconnects.
+
+```yaml
+# Command to run when a client connects to the server.
+# This is terminated with SIGINT when a client disconnects from the server.
+runOnConnect: curl "http://my-custom-server/webhook?conn_type=$MTX_CONN_TYPE&conn_id=$MTX_CONN_ID"
+runOnConnectRestart: false
+```
+
+**Available environment variables:**
+
+| Variable | Description |
+|---|---|
+| `MTX_CONN_TYPE` | Connection type (e.g. `rtsp`, `rtmp`, `webrtc`) |
+| `MTX_CONN_ID` | Unique connection ID |
+| `RTSP_PORT` | RTSP server port |
+
+  </Accordion>
+  <Accordion title="runOnDisconnect">
+
+Runs when a client disconnects from the server.
+
+```yaml
+# Command to run when a client disconnects from the server.
+# Environment variables are the same as runOnConnect.
+runOnDisconnect: curl "http://my-custom-server/webhook?conn_type=$MTX_CONN_TYPE&conn_id=$MTX_CONN_ID"
+```
+
+**Available environment variables:** same as `runOnConnect`.
+
+  </Accordion>
+</AccordionGroup>
+
+---
+
+## Path hooks
+
+Path hooks fire for specific paths and are configured under `pathDefaults` or individual entries in `paths`.
+
+<AccordionGroup>
+  <Accordion title="runOnInit">
+
+Runs when a path is initialized. Use this to start publishing a stream when the server launches.
+
+```yaml
+paths:
+  mypath:
+    runOnInit: ffmpeg -i my_file.mp4 -c copy -f rtsp rtsp://localhost:8554/mypath
+    runOnInitRestart: false
+```
+
+**Available environment variables:**
+
+| Variable | Description |
+|---|---|
+| `MTX_PATH` | Path name |
+| `RTSP_PORT` | RTSP server port |
+| `G1`, `G2`, ... | Regex capture groups (if path is a regex) |
+
+  </Accordion>
+  <Accordion title="runOnDemand">
+
+Runs when a reader requests a path and no publisher is active. Use this for on-demand publishing. The process is terminated with SIGINT when all readers disconnect.
+
+```yaml
+pathDefaults:
+  runOnDemand: ffmpeg -re -stream_loop -1 -i file.mp4 -c copy -f rtsp rtsp://localhost:$RTSP_PORT/$MTX_PATH
+  runOnDemandRestart: false
+  runOnDemandStartTimeout: 10s
+  runOnDemandCloseAfter: 10s
+```
+
+| Setting | Default | Description |
+|---|---|---|
+| `runOnDemandStartTimeout` | `10s` | How long readers wait for the command to start publishing |
+| `runOnDemandCloseAfter` | `10s` | How long to keep the process alive after the last reader disconnects |
+
+**Available environment variables:**
+
+| Variable | Description |
+|---|---|
+| `MTX_PATH` | Path name |
+| `MTX_QUERY` | Query parameters passed by the first reader |
+| `RTSP_PORT` | RTSP server port |
+| `G1`, `G2`, ... | Regex capture groups (if path is a regex) |
+
+  </Accordion>
+  <Accordion title="runOnUnDemand">
+
+Runs when there are no readers on a path anymore.
+
+```yaml
+pathDefaults:
+  runOnUnDemand: curl "http://my-custom-server/webhook?event=undemand&path=$MTX_PATH"
+```
+
+**Available environment variables:** same as `runOnDemand`.
+
+  </Accordion>
+  <Accordion title="runOnReady">
+
+Runs when a stream is ready to be read — either published by a client or pulled from a source. The process is terminated with SIGINT when the stream stops.
+
+```yaml
+pathDefaults:
+  runOnReady: >
+    curl "http://my-custom-server/webhook?path=$MTX_PATH&source_type=$MTX_SOURCE_TYPE&source_id=$MTX_SOURCE_ID"
+  runOnReadyRestart: false
+```
+
+**Available environment variables:**
+
+| Variable | Description |
+|---|---|
+| `MTX_PATH` | Path name |
+| `MTX_QUERY` | Query parameters passed by the publisher |
+| `MTX_SOURCE_TYPE` | Source type |
+| `MTX_SOURCE_ID` | Source ID |
+| `RTSP_PORT` | RTSP server port |
+| `G1`, `G2`, ... | Regex capture groups (if path is a regex) |
+
+**Common use case — re-publish to another server:**
+
+```yaml
+pathDefaults:
+  runOnReady: >
+    ffmpeg -i rtsp://localhost:$RTSP_PORT/$MTX_PATH
+    -c copy
+    -f rtsp rtsp://other-server:8554/another-path
+  runOnReadyRestart: true
+```
+
+  </Accordion>
+  <Accordion title="runOnNotReady">
+
+Runs when a stream is no longer available.
+
+```yaml
+pathDefaults:
+  runOnNotReady: >
+    curl "http://my-custom-server/webhook?path=$MTX_PATH&source_type=$MTX_SOURCE_TYPE&source_id=$MTX_SOURCE_ID"
+```
+
+**Available environment variables:** same as `runOnReady`.
+
+  </Accordion>
+  <Accordion title="runOnRead">
+
+Runs when a client starts reading a stream. The process is terminated with SIGINT when the client stops reading.
+
+```yaml
+pathDefaults:
+  runOnRead: >
+    curl "http://my-custom-server/webhook?path=$MTX_PATH&reader_type=$MTX_READER_TYPE&reader_id=$MTX_READER_ID"
+  runOnReadRestart: false
+```
+
+**Available environment variables:**
+
+| Variable | Description |
+|---|---|
+| `MTX_PATH` | Path name |
+| `MTX_QUERY` | Query parameters passed by the reader |
+| `MTX_READER_TYPE` | Reader type |
+| `MTX_READER_ID` | Reader ID |
+| `RTSP_PORT` | RTSP server port |
+| `G1`, `G2`, ... | Regex capture groups (if path is a regex) |
+
+  </Accordion>
+  <Accordion title="runOnUnread">
+
+Runs when a client stops reading a stream.
+
+```yaml
+pathDefaults:
+  runOnUnread: >
+    curl "http://my-custom-server/webhook?path=$MTX_PATH&reader_type=$MTX_READER_TYPE&reader_id=$MTX_READER_ID"
+```
+
+**Available environment variables:** same as `runOnRead`.
+
+  </Accordion>
+</AccordionGroup>
+
+---
+
+## Recording hooks
+
+Recording hooks fire in response to recording segment lifecycle events.
+
+<AccordionGroup>
+  <Accordion title="runOnRecordSegmentCreate">
+
+Runs when a new recording segment file is created.
+
+```yaml
+pathDefaults:
+  runOnRecordSegmentCreate: >
+    curl "http://my-custom-server/webhook?path=$MTX_PATH&segment_path=$MTX_SEGMENT_PATH"
+```
+
+**Available environment variables:**
+
+| Variable | Description |
+|---|---|
+| `MTX_PATH` | Path name |
+| `MTX_SEGMENT_PATH` | File path of the newly created segment |
+| `RTSP_PORT` | RTSP server port |
+| `G1`, `G2`, ... | Regex capture groups (if path is a regex) |
+
+  </Accordion>
+  <Accordion title="runOnRecordSegmentComplete">
+
+Runs when a recording segment is finalized and closed.
+
+```yaml
+pathDefaults:
+  runOnRecordSegmentComplete: >
+    curl "http://my-custom-server/webhook?path=$MTX_PATH&segment_path=$MTX_SEGMENT_PATH"
+```
+
+**Available environment variables:**
+
+| Variable | Description |
+|---|---|
+| `MTX_PATH` | Path name |
+| `MTX_SEGMENT_PATH` | File path of the completed segment |
+| `MTX_SEGMENT_DURATION` | Duration of the segment |
+| `RTSP_PORT` | RTSP server port |
+| `G1`, `G2`, ... | Regex capture groups (if path is a regex) |
+
+  </Accordion>
+</AccordionGroup>
+
+---
+
+## Restart variants
+
+Every hook that runs a persistent process (one terminated by SIGINT) has a corresponding `*Restart` option. When set to `true`, the command is restarted automatically if it exits:
+
+| Hook | Restart option |
+|---|---|
+| `runOnConnect` | `runOnConnectRestart` |
+| `runOnInit` | `runOnInitRestart` |
+| `runOnDemand` | `runOnDemandRestart` |
+| `runOnReady` | `runOnReadyRestart` |
+| `runOnRead` | `runOnReadRestart` |
+
+```yaml
+pathDefaults:
+  runOnReady: ffmpeg -i rtsp://localhost:$RTSP_PORT/$MTX_PATH -c copy -f rtsp rtsp://other-server:8554/stream
+  runOnReadyRestart: true
+```
+
+<Tip>
+  Use `runOnReadyRestart: true` when running FFmpeg pipelines to automatically recover from FFmpeg crashes or network interruptions.
+</Tip>

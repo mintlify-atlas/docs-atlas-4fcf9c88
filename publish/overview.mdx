@@ -1,0 +1,54 @@
+---
+title: "Publishing streams"
+description: "Publish live video and audio to MediaMTX from any client, camera, or server using SRT, WebRTC, RTSP, RTMP, HLS, MPEG-TS, or RTP."
+---
+
+MediaMTX accepts incoming streams from clients, cameras, and remote servers. Published streams are available immediately for reading — and are automatically converted between protocols, so a stream published over RTSP can be read over HLS, WebRTC, RTMP, or SRT without re-encoding.
+
+## How publishing works
+
+Every stream is identified by a **path** — a string such as `/mystream`. A publisher (FFmpeg, a camera, OBS, a browser, etc.) sends media to a path. Any number of readers can then consume that path using any supported protocol.
+
+MediaMTX supports two publisher models:
+
+- **Push (clients)** — the publisher connects to MediaMTX and sends the stream. This is the standard model for FFmpeg, OBS Studio, web browsers, and most streaming software.
+- **Pull (cameras and servers)** — MediaMTX connects out to an existing source (a camera's built-in RTSP server, an HLS playlist, a remote SRT endpoint) and ingests the stream. Configured in `mediamtx.yml` under `paths[name].source`.
+
+## Supported protocols and codecs
+
+| Protocol | Variants | Video codecs | Audio codecs |
+|---|---|---|---|
+| SRT clients | — | H265, H264, MPEG-4 Video, MPEG-1/2 Video | Opus, AAC, MP3, AC-3 |
+| SRT cameras/servers | — | H265, H264, MPEG-4 Video, MPEG-1/2 Video | Opus, AAC, MP3, AC-3 |
+| WebRTC clients | WHIP | AV1, VP9, VP8, H265, H264 | Opus, G722, G711 |
+| WebRTC servers | WHEP | AV1, VP9, VP8, H265, H264 | Opus, G722, G711 |
+| RTSP clients | UDP, TCP, RTSPS | AV1, VP9, VP8, H265, H264, MPEG-4 Video, MPEG-1/2 Video, MJPEG | Opus, AAC, MP3, AC-3, G726, G722, G711, LPCM |
+| RTSP cameras/servers | UDP, UDP-Multicast, TCP, RTSPS | AV1, VP9, VP8, H265, H264, MPEG-4 Video, MPEG-1/2 Video, MJPEG | Opus, AAC, MP3, AC-3, G726, G722, G711, LPCM |
+| RTMP clients | RTMP, RTMPS, Enhanced RTMP | AV1, VP9, H265, H264 | Opus, AAC, MP3, AC-3, G711, LPCM |
+| RTMP cameras/servers | RTMP, RTMPS, Enhanced RTMP | AV1, VP9, H265, H264 | Opus, AAC, MP3, AC-3, G711, LPCM |
+| HLS cameras/servers | LL-HLS, MP4-based HLS, legacy HLS | AV1, VP9, H265, H264 | Opus, AAC |
+| MPEG-TS | UDP, Unix socket | H265, H264, MPEG-4 Video, MPEG-1/2 Video | Opus, AAC, MP3, AC-3 |
+| RTP | RTP over UDP | AV1, VP9, VP8, H265, H264, MPEG-4 Video, MPEG-1/2 Video, M-JPEG | Opus, AAC, MP3, AC-3, G726, G722, G711, LPCM |
+
+## Protocol pages
+
+<CardGroup cols={2}>
+  <Card title="Publish via SRT" icon="satellite-dish" href="/publish/srt">
+    SRT clients, cameras, and servers. Passphrase encryption and stream ID options.
+  </Card>
+  <Card title="Publish via WebRTC" icon="globe" href="/publish/webrtc">
+    WHIP clients, browser publishing, and WebRTC server sources.
+  </Card>
+  <Card title="Publish via RTSP" icon="video" href="/publish/rtsp">
+    RTSP clients and IP cameras. UDP, TCP, multicast, and RTSPS transports.
+  </Card>
+  <Card title="Publish via RTMP" icon="tower-broadcast" href="/publish/rtmp">
+    RTMP clients including OBS Studio and FFmpeg. RTMPS and Enhanced RTMP support.
+  </Card>
+  <Card title="Publish via HLS, MPEG-TS, and RTP" icon="signal-stream" href="/publish/hls-mpeg-ts-rtp">
+    Ingest from HLS servers, MPEG-TS over UDP or Unix socket, and RTP over UDP.
+  </Card>
+  <Card title="Publishing with popular tools" icon="wrench" href="/publish/tools">
+    FFmpeg, GStreamer, OBS Studio, Python/OpenCV, Go, Unity, web browsers, and cameras.
+  </Card>
+</CardGroup>

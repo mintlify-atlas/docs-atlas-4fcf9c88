@@ -1,0 +1,115 @@
+---
+title: "On-demand publishing"
+description: "Start a publisher process automatically when a reader connects and stop it when no readers remain."
+keywords: ["on-demand", "runOnDemand", "sourceOnDemand", "lazy publishing", "on-demand streaming"]
+---
+
+MediaMTX can start a publisher process automatically the first time a reader requests a path, and stop it when the last reader disconnects. This saves resources — the publisher only runs when someone is actually watching.
+
+There are two ways to configure on-demand publishing:
+
+- **`runOnDemand`** — runs a shell command (e.g. FFmpeg) as the publisher
+- **`sourceOnDemand`** — connects to an external source URL on demand
+
+## runOnDemand
+
+Set `runOnDemand` to a command that publishes to the path. The command starts when the first reader connects and is sent SIGINT when there are no more readers.
+
+```yaml
+paths:
+  ondemand:
+    runOnDemand: ffmpeg -re -stream_loop -1 -i file.mp4 -c copy -f rtsp rtsp://localhost:$RTSP_PORT/$MTX_PATH
+    runOnDemandRestart: true
+```
+
+When a client requests `rtsp://localhost:8554/ondemand`, FFmpeg starts streaming `file.mp4`. When the last client disconnects, FFmpeg is stopped.
+
+### Available environment variables
+
+| Variable | Description |
+|---|---|
+| `MTX_PATH` | Name of the requested path |
+| `MTX_QUERY` | Query string passed by the first reader |
+| `RTSP_PORT` | RTSP server port (default `8554`) |
+| `G1`, `G2`, ... | Regex capture groups, if the path name is a regular expression |
+
+### Timeout and close delay
+
+```yaml
+paths:
+  ondemand:
+    runOnDemand: ffmpeg -re -stream_loop -1 -i file.mp4 -c copy -f rtsp rtsp://localhost:$RTSP_PORT/$MTX_PATH
+    runOnDemandRestart: true
+
+    # How long readers wait for the command to start publishing.
+    # If the command doesn't publish within this time, readers receive an error.
+    runOnDemandStartTimeout: 10s
+
+    # How long to keep the command running after the last reader disconnects.
+    # Useful to avoid stopping and restarting for brief disconnections.
+    runOnDemandCloseAfter: 10s
+```
+
+| Setting | Default | Description |
+|---|---|---|
+| `runOnDemandStartTimeout` | `10s` | Maximum time to wait for the command to start publishing before failing readers |
+| `runOnDemandCloseAfter` | `10s` | How long to keep the command alive after the last reader disconnects |
+| `runOnDemandRestart` | `false` | Restart the command automatically if it exits while readers are connected |
+
+### Passing query parameters
+
+The query string from the first reader's request is available as `MTX_QUERY`. This lets readers influence what content is served:
+
+```yaml
+paths:
+  "~^stream_(.+)$":
+    runOnDemand: ffmpeg -re -i /media/$G1.mp4 -c copy -f rtsp rtsp://localhost:$RTSP_PORT/$MTX_PATH
+    runOnDemandRestart: true
+```
+
+A reader requesting `rtsp://localhost:8554/stream_myvideo` causes FFmpeg to stream `/media/myvideo.mp4`.
+
+### Stopping when no readers remain
+
+Use `runOnUnDemand` to run a cleanup command when the last reader disconnects:
+
+```yaml
+paths:
+  ondemand:
+    runOnDemand: ffmpeg -re -stream_loop -1 -i file.mp4 -c copy -f rtsp rtsp://localhost:$RTSP_PORT/$MTX_PATH
+    runOnUnDemand: curl -s "http://my-server/webhook?event=stopped&path=$MTX_PATH"
+```
+
+---
+
+## sourceOnDemand
+
+When a path is configured with an external `source` URL, you can enable `sourceOnDemand` to connect to the source only when a reader is present:
+
+```yaml
+paths:
+  camera:
+    source: rtsp://192.168.1.100:554/stream
+    sourceOnDemand: true
+    sourceOnDemandStartTimeout: 10s
+    sourceOnDemandCloseAfter: 10s
+```
+
+This is equivalent to `runOnDemand` but for URL-based sources rather than shell commands. The connection to the camera is opened when the first reader connects and closed after the last reader leaves (plus the `sourceOnDemandCloseAfter` delay).
+
+### Regex-based on-demand proxy
+
+Use a regular expression path to create a dynamic on-demand proxy for many sources from one rule:
+
+```yaml
+paths:
+  "~^proxy_(.+)$":
+    source: rtsp://camera-server:8554/$G1
+    sourceOnDemand: true
+```
+
+A request to `rtsp://localhost:8554/proxy_cam1` pulls from `rtsp://camera-server:8554/cam1` on demand.
+
+<Tip>
+  Use `sourceOnDemandCloseAfter` to add a grace period before closing the source. This prevents rapid connect/disconnect cycles when readers briefly drop and reconnect.
+</Tip>

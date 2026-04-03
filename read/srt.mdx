@@ -1,0 +1,77 @@
+---
+title: "Read via SRT"
+description: "Read live streams from MediaMTX using the SRT protocol. SRT provides encryption, integrity checks, and retransmission — typically used with MPEG-TS encapsulated media."
+---
+
+SRT (Secure Reliable Transport) is a protocol designed for low-latency, reliable media transport over unreliable networks. It provides built-in encryption and retransmission. Streams are typically encapsulated in MPEG-TS.
+
+## Read a stream
+
+Use the following URL to read a stream via SRT:
+
+```
+srt://localhost:8890?streamid=read:mystream
+```
+
+Replace `mystream` with the path name of the stream you want to read.
+
+<Note>
+  The default SRT port is `8890` (UDP). This is configured via `srtAddress` in `mediamtx.yml`.
+</Note>
+
+## Stream ID
+
+The `streamid` parameter tells the server whether you are publishing or reading, and which path to use.
+
+For reading, use the format:
+
+```
+streamid=read:mypath
+```
+
+### Standard stream ID syntax
+
+MediaMTX also supports the [standard SRT stream ID syntax](https://github.com/Haivision/srt/blob/master/docs/features/access-control.md) defined by the SRT protocol authors. Some hardware encoders and decoders require this format:
+
+```
+srt://localhost:8890?streamid=#!::m=request,r=mypath,u=myuser,s=mypass&pkt_size=1316
+```
+
+Where:
+
+- `m` — the action: `request` for reading
+- `r` — the path name
+- `u` — the username (optional, for authentication)
+- `s` — the password (optional, for authentication)
+
+## Passphrase (encryption)
+
+You can require a passphrase for reading a specific path. Set `srtReadPassphrase` on the path in `mediamtx.yml`:
+
+```yaml
+paths:
+  mystream:
+    srtReadPassphrase: mypassphrase
+```
+
+Readers must then include the passphrase in their SRT URL:
+
+```
+srt://localhost:8890?streamid=read:mystream&passphrase=mypassphrase
+```
+
+## Read with FFmpeg
+
+```bash
+ffmpeg -i 'srt://localhost:8890?streamid=read:mystream' -c copy output.mp4
+```
+
+## Read with GStreamer
+
+```bash
+gst-launch-1.0 srtsrc uri="srt://localhost:8890?streamid=read:mystream" ! tsdemux ! decodebin ! autovideosink
+```
+
+<Note>
+  SRT streams are typically MPEG-TS, so `tsdemux` is used to unwrap the container before decoding.
+</Note>

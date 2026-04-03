@@ -1,0 +1,73 @@
+---
+title: "Publish via SRT"
+description: "Publish live streams to MediaMTX using the SRT protocol from clients, cameras, and remote servers."
+---
+
+SRT (Secure Reliable Transport) is a protocol designed for low-latency, encrypted live streaming. It provides retransmission and integrity checks and typically carries media encoded as MPEG-TS.
+
+**Supported codecs**
+
+| Type | Codecs |
+|---|---|
+| Video | H265, H264, MPEG-4 Video (H263, Xvid), MPEG-1/2 Video |
+| Audio | Opus, MPEG-4 Audio (AAC), MPEG-1/2 Audio (MP3), AC-3 |
+| Other | KLV |
+
+## SRT clients
+
+A client connects to MediaMTX and pushes the stream. Use the following URL format to publish:
+
+```
+srt://localhost:8890?streamid=publish:mystream&pkt_size=1316
+```
+
+Replace `mystream` with any path name you want. The stream becomes available at `/mystream`.
+
+<Note>
+  If you need to use the standard SRT stream ID syntax instead of the `publish:name` format used by MediaMTX, see the SRT-specific features documentation.
+</Note>
+
+### Client in listening mode
+
+Some SRT clients operate in listening mode (they listen for an incoming connection rather than dialing out). To publish from such a client, append `mode=listener` to the SRT URL in the client, then configure MediaMTX to connect to the client using a `source` entry (see [SRT cameras and servers](#srt-cameras-and-servers) below).
+
+### Tools that support SRT publishing
+
+- [FFmpeg](/publish/tools#ffmpeg) — use the `mpegts` muxer with an `srt://` output URL
+- [GStreamer](/publish/tools#gstreamer) — use the `srtsink` element
+- [OBS Studio](/publish/tools#obs-studio) — select the SRT service in stream settings
+
+## SRT cameras and servers
+
+MediaMTX can connect outward to an existing SRT source — a camera, encoder, or remote server — and pull the stream. This includes SRT clients operating in listening mode.
+
+Add the source URL to `mediamtx.yml`:
+
+```yaml
+paths:
+  proxied:
+    # URL of the source stream, in the format srt://host:port?streamid=streamid&other_parameters
+    source: srt://original-url
+```
+
+The ingested stream is available at `/proxied`.
+
+### Passphrase encryption
+
+SRT supports AES encryption using a passphrase. When connecting to a source that requires a passphrase, include it in the URL:
+
+```yaml
+paths:
+  secured:
+    source: srt://original-url?passphrase=mysecretkey
+```
+
+When publishing as a client to MediaMTX, pass the passphrase in the SRT URL:
+
+```
+srt://localhost:8890?streamid=publish:mystream&pkt_size=1316&passphrase=mysecretkey
+```
+
+<Warning>
+  Both the publisher and the server must use the same passphrase. A mismatch will cause the connection to fail silently.
+</Warning>

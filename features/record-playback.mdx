@@ -1,0 +1,207 @@
+---
+title: "Recording and playback"
+description: "Record live streams to disk in fMP4 or MPEG-TS format and play them back through a built-in HTTP server."
+keywords: ["recording", "playback", "fmp4", "mpegts", "segments", "record", "DVR"]
+---
+
+MediaMTX can record live streams to disk and serve them back through a dedicated playback HTTP server. Recordings are split into segments, and older segments can be deleted automatically.
+
+## Supported formats and codecs
+
+| Container | Video codecs | Audio codecs |
+|---|---|---|
+| fMP4 | AV1, VP9, H265, H264, MPEG-4 Video (H263, Xvid), MPEG-1/2 Video, M-JPEG | Opus, MPEG-4 Audio (AAC), MPEG-1/2 Audio (MP3), AC-3, G711 (PCMA/PCMU), LPCM |
+| MPEG-TS | H265, H264, MPEG-4 Video (H263, Xvid), MPEG-1/2 Video | Opus, MPEG-4 Audio (AAC), MPEG-1/2 Audio (MP3), AC-3 |
+
+## Enabling recording
+
+Set `record: true` on the paths you want to record. Use `pathDefaults` to record all streams:
+
+```yaml
+pathDefaults:
+  record: true
+```
+
+Or enable recording for a specific path only:
+
+```yaml
+paths:
+  live:
+    record: true
+```
+
+## Recording options
+
+```yaml
+pathDefaults:
+  # Enable recording
+  record: true
+
+  # File path template for segments. Extension is added automatically.
+  # Available variables:
+  #   %path   — path name
+  #   %Y      — year (4 digits)
+  #   %m      — month (2 digits)
+  #   %d      — day (2 digits)
+  #   %H      — hours (2 digits)
+  #   %M      — minutes (2 digits)
+  #   %S      — seconds (2 digits)
+  #   %f      — microseconds (6 digits)
+  #   %z      — time zone offset
+  #   %s      — unix epoch timestamp
+  recordPath: ./recordings/%path/%Y-%m-%d_%H-%M-%S-%f
+
+  # File format. Available values: "fmp4" (fragmented MP4), "mpegts" (MPEG-TS)
+  recordFormat: fmp4
+
+  # Duration of each part within a segment.
+  # For fMP4: each part is a small MP4 file.
+  # For MPEG-TS: data is flushed to disk at this interval.
+  # If a system failure occurs, the last part is lost.
+  # This value equals the RPO (recovery point objective).
+  recordPartDuration: 1s
+
+  # Maximum size of a single part, to prevent RAM exhaustion.
+  recordMaxPartSize: 50M
+
+  # Minimum duration of each segment file.
+  recordSegmentDuration: 1h
+
+  # Delete segments older than this. Set to 0s to disable deletion.
+  recordDeleteAfter: 1d
+```
+
+<Note>
+  The `recordPath` template is evaluated at the time each segment is created, so `%Y-%m-%d_%H-%M-%S` reflects the start time of the segment.
+</Note>
+
+## Recording hooks
+
+Run commands when segments are created or completed:
+
+```yaml
+pathDefaults:
+  record: true
+
+  # Runs when a new segment file is created.
+  # Environment variables: MTX_PATH, MTX_SEGMENT_PATH, RTSP_PORT, G1/G2/...
+  runOnRecordSegmentCreate: >
+    curl -s "http://my-server/webhook?event=create&path=$MTX_PATH&segment=$MTX_SEGMENT_PATH"
+
+  # Runs when a segment is finalized.
+  # Additional env var: MTX_SEGMENT_DURATION
+  runOnRecordSegmentComplete: >
+    curl -s "http://my-server/webhook?event=complete&path=$MTX_PATH&segment=$MTX_SEGMENT_PATH"
+```
+
+## Uploading to remote storage
+
+Use [rclone](https://github.com/rclone/rclone) to sync completed segments to S3, FTP, Google Drive, or any other supported backend:
+
+<Steps>
+  <Step title="Install rclone">
+    Download and install rclone from [rclone.org](https://rclone.org/downloads/).
+  </Step>
+  <Step title="Configure a remote">
+    ```bash
+    rclone config
+    ```
+  </Step>
+  <Step title="Add hooks to mediamtx.yml">
+    ```yaml
+    pathDefaults:
+      record: true
+
+      # Sync on startup to recover any segments from a crash
+      runOnInit: rclone sync -v ./recordings myconfig:/my-path/recordings
+
+      # Sync after each completed segment
+      runOnRecordSegmentComplete: >
+        rclone sync -v --min-age=1ms ./recordings myconfig:/my-path/recordings
+    ```
+
+    To delete local files after upload, replace `rclone sync` with `rclone move`.
+  </Step>
+</Steps>
+
+---
+
+## Playback server
+
+MediaMTX includes a built-in HTTP server for browsing and downloading recordings.
+
+### Enabling the playback server
+
+```yaml
+playback: true
+playbackAddress: :9996
+```
+
+### Listing recordings
+
+Query available timespans for a path:
+
+```
+GET http://localhost:9996/list?path=<path>&start=<RFC3339>&end=<RFC3339>
+```
+
+| Parameter | Required | Description |
+|---|---|---|
+| `path` | Yes | The path name |
+| `start` | No | Start of the time range in RFC3339 format |
+| `end` | No | End of the time range in RFC3339 format |
+
+Example response:
+
+```json
+[
+  {
+    "start": "2006-01-02T15:04:05Z07:00",
+    "duration": 60.0,
+    "url": "http://localhost:9996/get?path=live&start=2006-01-02T15%3A04%3A05Z07%3A00&duration=60.0"
+  },
+  {
+    "start": "2006-01-02T15:07:05Z07:00",
+    "duration": 32.33,
+    "url": "http://localhost:9996/get?path=live&start=2006-01-02T15%3A07%3A05Z07%3A00&duration=32.33"
+  }
+]
+```
+
+### Downloading recordings
+
+```
+GET http://localhost:9996/get?path=<path>&start=<RFC3339>&duration=<seconds>&format=<format>
+```
+
+| Parameter | Required | Description |
+|---|---|---|
+| `path` | Yes | Path name |
+| `start` | Yes | Start time in RFC3339 format (URL-encoded) |
+| `duration` | Yes | Maximum duration in seconds |
+| `format` | No | Output format: `fmp4` (default) or `mp4` |
+
+All parameter values must be URL-encoded. Example:
+
+```
+http://localhost:9996/get?path=live&start=2024-01-14T16%3A33%3A17%2B00%3A00&duration=200.5
+```
+
+### Embedding in a web page
+
+The fMP4 format is natively compatible with browsers and can be used directly in a `<video>` tag:
+
+```html
+<video controls>
+  <source
+    src="http://localhost:9996/get?path=live&start=2024-01-14T16%3A33%3A17%2B00%3A00&duration=200.5"
+    type="video/mp4"
+  />
+</video>
+```
+
+If you experience compatibility issues with fMP4 in certain players, use `format=mp4` to get a standard MP4 file instead:
+
+```
+http://localhost:9996/get?path=live&start=2024-01-14T16%3A33%3A17%2B00%3A00&duration=200.5&format=mp4
+```

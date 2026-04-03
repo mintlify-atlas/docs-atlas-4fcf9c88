@@ -1,0 +1,647 @@
+---
+title: "Publishing with popular tools"
+description: "Step-by-step instructions for publishing streams to MediaMTX with FFmpeg, GStreamer, OBS Studio, Python/OpenCV, Go, Unity, web browsers, and cameras."
+---
+
+MediaMTX works with any standard streaming tool or library. This page collects ready-to-use instructions for the most common ones.
+
+<Tabs>
+  <Tab title="FFmpeg">
+    FFmpeg can publish to MediaMTX using RTSP (recommended), RTMP, SRT, WebRTC (WHIP), MPEG-TS over UDP, MPEG-TS over Unix socket, or RTP over UDP.
+
+    <AccordionGroup>
+      <Accordion title="RTSP (recommended)">
+        ```bash
+        ffmpeg -re -stream_loop -1 -i file.mp4 -c copy -f rtsp rtsp://localhost:8554/mystream
+        ```
+
+        The stream becomes available at `/mystream`.
+      </Accordion>
+
+      <Accordion title="RTMP">
+        ```bash
+        ffmpeg -re -stream_loop -1 -i file.mp4 -c copy -f flv rtmp://localhost/mystream
+        ```
+      </Accordion>
+
+      <Accordion title="SRT">
+        ```bash
+        ffmpeg -re -stream_loop -1 -i file.mp4 -c copy -f mpegts 'srt://localhost:8890?streamid=publish:stream&pkt_size=1316'
+        ```
+      </Accordion>
+
+      <Accordion title="WebRTC (WHIP)">
+        ```bash
+        ffmpeg -re -f lavfi -i testsrc=size=1280x720:rate=30 \
+        -f lavfi -i "sine=frequency=1000:sample_rate=48000" \
+        -c:v libx264 -pix_fmt yuv420p -preset ultrafast -b:v 600k \
+        -c:a libopus -ar 48000 -ac 2 -b:a 128k \
+        -f whip http://localhost:8889/stream/whip
+        ```
+
+        <Warning>
+          With FFmpeg 8.0, both a video track and an audio track must be present in the WHIP stream.
+        </Warning>
+      </Accordion>
+
+      <Accordion title="MPEG-TS over UDP">
+        First, add a path to `mediamtx.yml`:
+
+        ```yaml
+        paths:
+          mypath:
+            source: udp+mpegts://238.0.0.1:1234
+        ```
+
+        Then push the stream:
+
+        ```bash
+        ffmpeg -re -stream_loop -1 -i file.mp4 -c copy -f mpegts 'udp://238.0.0.1:1234?pkt_size=1316'
+        ```
+      </Accordion>
+
+      <Accordion title="MPEG-TS over Unix socket">
+        First, add a path to `mediamtx.yml`:
+
+        ```yaml
+        paths:
+          mypath:
+            source: unix+mpegts:///tmp/socket.sock
+        ```
+
+        Then push the stream:
+
+        ```bash
+        ffmpeg -re -f lavfi -i testsrc=size=1280x720:rate=30 \
+        -c:v libx264 -pix_fmt yuv420p -preset ultrafast -b:v 600k \
+        -f mpegts unix:/tmp/socket.sock
+        ```
+      </Accordion>
+
+      <Accordion title="RTP over UDP">
+        First, add a path to `mediamtx.yml` with a valid SDP:
+
+        ```yaml
+        paths:
+          mypath:
+            source: udp+rtp://238.0.0.1:1234
+            rtpSDP: |
+              v=0
+              o=- 123456789 123456789 IN IP4 192.168.1.100
+              s=H264 Video Stream
+              c=IN IP4 192.168.1.100
+              t=0 0
+              m=video 5004 RTP/AVP 96
+              a=rtpmap:96 H264/90000
+              a=fmtp:96 profile-level-id=42e01e;packetization-mode=1;sprop-parameter-sets=Z0LAHtkDxWhAAAADAEAAAAwDxYuS,aMuMsg==
+        ```
+
+        Then push the stream:
+
+        ```bash
+        ffmpeg -re -f lavfi -i testsrc=size=1280x720:rate=30 \
+        -c:v libx264 -pix_fmt yuv420p -preset ultrafast -b:v 600k \
+        -f rtp udp://238.0.0.1:1234?pkt_size=1316
+        ```
+      </Accordion>
+    </AccordionGroup>
+  </Tab>
+
+  <Tab title="GStreamer">
+    GStreamer can publish to MediaMTX using RTSP (recommended), RTMP, MPEG-TS over UDP, or WebRTC (WHIP).
+
+    <AccordionGroup>
+      <Accordion title="RTSP (recommended)">
+        For a file with both video and audio:
+
+        ```bash
+        gst-launch-1.0 rtspclientsink name=s location=rtsp://localhost:8554/mystream \
+        filesrc location=file.mp4 ! qtdemux name=d \
+        d.video_0 ! queue ! s.sink_0 \
+        d.audio_0 ! queue ! s.sink_1
+        ```
+
+        For video only:
+
+        ```bash
+        gst-launch-1.0 filesrc location=file.mp4 ! qtdemux name=d \
+        d.video_0 ! rtspclientsink location=rtsp://localhost:8554/mystream
+        ```
+
+        The stream becomes available at `/mystream`.
+      </Accordion>
+
+      <Accordion title="RTMP">
+        ```bash
+        gst-launch-1.0 -v flvmux name=mux ! rtmpsink location=rtmp://localhost/stream \
+        videotestsrc ! video/x-raw,width=1280,height=720,format=I420 ! x264enc speed-preset=ultrafast bitrate=3000 key-int-max=60 ! video/x-h264,profile=high ! mux. \
+        audiotestsrc ! audioconvert ! avenc_aac ! mux.
+        ```
+      </Accordion>
+
+      <Accordion title="MPEG-TS over UDP">
+        ```bash
+        gst-launch-1.0 -v mpegtsmux name=mux alignment=1 ! udpsink host=238.0.0.1 port=1234 \
+        videotestsrc ! video/x-raw,width=1280,height=720,format=I420 ! x264enc speed-preset=ultrafast bitrate=3000 key-int-max=60 ! video/x-h264,profile=high ! mux. \
+        audiotestsrc ! audioconvert ! avenc_aac ! mux.
+        ```
+      </Accordion>
+
+      <Accordion title="WebRTC (WHIP)">
+        GStreamer v1.22 or later is required. If the codec is H264, the profile must be `baseline`.
+
+        ```bash
+        gst-launch-1.0 videotestsrc \
+        ! video/x-raw,width=1920,height=1080,format=I420 \
+        ! x264enc speed-preset=ultrafast bitrate=2000 \
+        ! video/x-h264,profile=baseline \
+        ! whipclientsink signaller::whip-endpoint=http://localhost:8889/mystream/whip
+        ```
+      </Accordion>
+    </AccordionGroup>
+  </Tab>
+
+  <Tab title="OBS Studio">
+    OBS Studio can publish to MediaMTX via RTMP or WebRTC (WHIP).
+
+    <AccordionGroup>
+      <Accordion title="RTMP">
+        In **Settings → Stream**:
+
+        - **Service**: `Custom...`
+        - **Server**: `rtmp://localhost/mystream`
+        - **Stream key**: (leave empty)
+
+        Click **Start streaming**. The stream becomes available at `/mystream`.
+      </Accordion>
+
+      <Accordion title="RTMP with multitrack video (simulcast)">
+        OBS Studio v31.0.0 or later is required. In **Settings → Stream**:
+
+        - **Service**: `Custom...`
+        - **Server**: `rtmp://localhost/mystream`
+        - **Stream key**: (leave empty)
+        - Enable **Enable Multitrack Video**
+        - Leave **Maximum Streaming Bandwidth** and **Maximum Video Tracks** set to `Auto`
+        - Enable **Enable Config Override**
+        - Paste a JSON config into **Config Override (JSON)**. Example with two renditions:
+
+        ```json
+        {
+          "encoder_configurations": [
+            {
+              "type": "obs_x264",
+              "width": 1920,
+              "height": 1080,
+              "framerate": { "numerator": 30, "denominator": 1 },
+              "settings": {
+                "rate_control": "CBR",
+                "bitrate": 6000,
+                "keyint_sec": 2,
+                "preset": "veryfast",
+                "profile": "high",
+                "tune": "zerolatency"
+              },
+              "canvas_index": 0
+            },
+            {
+              "type": "obs_x264",
+              "width": 640,
+              "height": 480,
+              "framerate": { "numerator": 30, "denominator": 1 },
+              "settings": {
+                "rate_control": "CBR",
+                "bitrate": 3000,
+                "keyint_sec": 2,
+                "preset": "veryfast",
+                "profile": "main",
+                "tune": "zerolatency"
+              },
+              "canvas_index": 0
+            }
+          ],
+          "audio_configurations": {
+            "live": [
+              {
+                "codec": "ffmpeg_aac",
+                "track_id": 1,
+                "channels": 2,
+                "settings": { "bitrate": 160 }
+              }
+            ]
+          }
+        }
+        ```
+
+        Click **Start streaming**.
+      </Accordion>
+
+      <Accordion title="WebRTC (WHIP)">
+        In **Settings → Stream**:
+
+        - **Service**: `WHIP`
+        - **Server**: `http://localhost:8889/mystream/whip`
+
+        Click **Start streaming**. The stream becomes available at `/mystream`.
+      </Accordion>
+
+      <Accordion title="WebRTC with multitrack video (simulcast)">
+        OBS Studio v32.1.0 or later is required. In **Settings → Stream**:
+
+        - **Service**: `WHIP`
+        - **Server**: `http://localhost:8889/mystream/whip`
+        - **Simulcast, Total Layers**: `2` (or greater)
+
+        <Note>
+          Resolution and bitrate of secondary renditions are hardcoded as a percentage of the primary rendition and cannot be configured directly. See the [OBS documentation](https://obsproject.com/kb/whip-streaming-guide) for details.
+        </Note>
+
+        Click **Start streaming**.
+      </Accordion>
+    </AccordionGroup>
+  </Tab>
+
+  <Tab title="Python / OpenCV">
+    Python can publish streams via RTSP using OpenCV's GStreamer plugin.
+
+    <Steps>
+      <Step title="Install dependencies">
+        ```bash
+        sudo apt install -y libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev gstreamer1.0-plugins-ugly gstreamer1.0-rtsp python3-dev python3-numpy
+        ```
+      </Step>
+
+      <Step title="Build OpenCV with GStreamer support">
+        ```bash
+        git clone --depth=1 -b 4.5.4 https://github.com/opencv/opencv
+        cd opencv
+        mkdir build && cd build
+        cmake -D CMAKE_INSTALL_PREFIX=/usr -D WITH_GSTREAMER=ON ..
+        make -j$(nproc)
+        sudo make install
+        ```
+      </Step>
+
+      <Step title="Verify the installation">
+        ```bash
+        python3 -c 'import cv2; print(cv2.getBuildInformation())'
+        ```
+
+        Confirm that the output contains `GStreamer: YES`.
+      </Step>
+
+      <Step title="Publish a stream">
+        ```python
+        from datetime import datetime
+        from time import sleep, time
+
+        import cv2
+        import numpy as np
+
+        fps = 15
+        width = 800
+        height = 600
+        colors = [
+            (0, 0, 255),
+            (255, 0, 0),
+            (0, 255, 0),
+        ]
+
+        out = cv2.VideoWriter('appsrc ! videoconvert' + \
+            ' ! video/x-raw,format=I420' + \
+            ' ! x264enc speed-preset=ultrafast bitrate=600 key-int-max=' + str(fps * 2) + \
+            ' ! video/x-h264,profile=baseline' + \
+            ' ! rtspclientsink location=rtsp://localhost:8554/mystream',
+            cv2.CAP_GSTREAMER, 0, fps, (width, height), True)
+        if not out.isOpened():
+            raise Exception("can't open video writer")
+
+        curcolor = 0
+        start = time()
+
+        while True:
+            frame = np.zeros((height, width, 3), np.uint8)
+
+            color = colors[curcolor]
+            curcolor += 1
+            curcolor %= len(colors)
+            for y in range(0, int(frame.shape[0] / 2)):
+                for x in range(0, int(frame.shape[1] / 2)):
+                    frame[y][x] = color
+
+            out.write(frame)
+            print("%s frame written to the server" % datetime.now())
+
+            now = time()
+            diff = (1 / fps) - now - start
+            if diff > 0:
+                sleep(diff)
+            start = now
+        ```
+
+        The stream becomes available at `/mystream`.
+      </Step>
+    </Steps>
+  </Tab>
+
+  <Tab title="Go">
+    Go applications can publish streams using the libraries that power MediaMTX itself:
+
+    - [gortsplib](https://github.com/bluenviron/gortsplib) — publish with RTSP
+    - [gortmplib](https://github.com/bluenviron/gortmplib) — publish with RTMP
+
+    Both repositories contain usage examples for connecting to a server and pushing media data.
+  </Tab>
+
+  <Tab title="Unity">
+    Unity projects can publish streams using the WebRTC protocol.
+
+    <Steps>
+      <Step title="Install the WebRTC package">
+        Open **Window → Package Manager**, click the **+** button, select **Add Package by name...**, and enter `com.unity.webrtc`. Wait for installation to complete.
+      </Step>
+
+      <Step title="Create the publisher script">
+        In the **Project** window under **Assets**, create a C# script named `WebRTCPublisher.cs`:
+
+        ```csharp
+        using System.Collections;
+        using UnityEngine;
+        using Unity.WebRTC;
+        using UnityEngine.Networking;
+
+        public class WebRTCPublisher : MonoBehaviour
+        {
+            public string url = "http://localhost:8889/unity/whip";
+            public int videoWidth = 1280;
+            public int videoHeight = 720;
+
+            private RTCPeerConnection pc;
+            private MediaStream videoStream;
+
+            void Start()
+            {
+                pc = new RTCPeerConnection();
+                Camera sourceCamera = gameObject.GetComponent<Camera>();
+                videoStream = sourceCamera.CaptureStream(videoWidth, videoHeight);
+                foreach (var track in videoStream.GetTracks())
+                {
+                    pc.AddTrack(track);
+                }
+
+                StartCoroutine(WebRTC.Update());
+                StartCoroutine(createOffer());
+            }
+
+            private IEnumerator createOffer()
+            {
+                var op = pc.CreateOffer();
+                yield return op;
+                if (op.IsError) {
+                    Debug.LogError("CreateOffer() failed");
+                    yield break;
+                }
+
+                yield return setLocalDescription(op.Desc);
+            }
+
+            private IEnumerator setLocalDescription(RTCSessionDescription offer)
+            {
+                var op = pc.SetLocalDescription(ref offer);
+                yield return op;
+                if (op.IsError) {
+                    Debug.LogError("SetLocalDescription() failed");
+                    yield break;
+                }
+
+                yield return postOffer(offer);
+            }
+
+            private IEnumerator postOffer(RTCSessionDescription offer)
+            {
+                var content = new System.Net.Http.StringContent(offer.sdp);
+                content.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("application/sdp");
+                var client = new System.Net.Http.HttpClient();
+
+                var task = System.Threading.Tasks.Task.Run(async () => {
+                    var res = await client.PostAsync(new System.UriBuilder(url).Uri, content);
+                    res.EnsureSuccessStatusCode();
+                    return await res.Content.ReadAsStringAsync();
+                });
+                yield return new WaitUntil(() => task.IsCompleted);
+                if (task.Exception != null) {
+                    Debug.LogError(task.Exception);
+                    yield break;
+                }
+
+                yield return setRemoteDescription(task.Result);
+            }
+
+            private IEnumerator setRemoteDescription(string answer)
+            {
+                RTCSessionDescription desc = new RTCSessionDescription();
+                desc.type = RTCSdpType.Answer;
+                desc.sdp = answer;
+                var op = pc.SetRemoteDescription(ref desc);
+                yield return op;
+                if (op.IsError) {
+                    Debug.LogError("SetRemoteDescription() failed");
+                    yield break;
+                }
+
+                yield break;
+            }
+
+            void OnDestroy()
+            {
+                pc?.Close();
+                pc?.Dispose();
+                videoStream?.Dispose();
+            }
+        }
+        ```
+      </Step>
+
+      <Step title="Attach the script to a camera">
+        In the **Hierarchy** window, find or create a scene with a camera. Drag `WebRTCPublisher.cs` into the camera's **Inspector** panel to attach it as a component.
+      </Step>
+
+      <Step title="Start publishing">
+        Press the **Play** button. The stream becomes available at `/unity`.
+      </Step>
+    </Steps>
+  </Tab>
+
+  <Tab title="Web browsers">
+    Any modern web browser can publish a stream using WebRTC. Open the built-in publish page:
+
+    ```
+    http://localhost:8889/mystream/publish
+    ```
+
+    The browser captures your camera and microphone and sends the stream to MediaMTX. The stream becomes available at `/mystream`.
+
+    You can embed this page inside another web page using an iframe:
+
+    ```html
+    <iframe src="http://mediamtx-ip:8889/mystream/publish" scrolling="no"></iframe>
+    ```
+
+    For custom integrations, build your own page using the [source of the built-in publish page](https://github.com/bluenviron/mediamtx/blob/main/internal/servers/webrtc/publish_index.html). A standalone, reusable JavaScript class for WebRTC publishing is available in [publisher.js](https://github.com/bluenviron/mediamtx/blob/main/internal/servers/webrtc/publisher.js).
+  </Tab>
+
+  <Tab title="Raspberry Pi Camera">
+    MediaMTX has native support for Raspberry Pi Camera modules, with no additional software required.
+
+    **Requirements:**
+    - Raspberry Pi running Raspberry Pi OS Trixie, Bookworm, or Bullseye (32-bit or 64-bit)
+    - If using Bullseye: legacy camera stack must be disabled (`sudo raspi-config` → **Interfacing options** → disable legacy camera support → reboot)
+
+    <Tabs>
+      <Tab title="Standalone binary">
+        <Steps>
+          <Step title="Download the binary">
+            Download the MediaMTX binary for your architecture. For 64-bit Raspberry Pi OS, use the `arm64` variant.
+          </Step>
+
+          <Step title="Configure the path">
+            Edit `mediamtx.yml` and set the camera as a path source:
+
+            ```yaml
+            paths:
+              cam:
+                source: rpiCamera
+            ```
+
+            The stream becomes available at `/cam`.
+          </Step>
+        </Steps>
+      </Tab>
+
+      <Tab title="Docker">
+        Use the `1-rpi` image and pass the required flags:
+
+        ```bash
+        docker run --rm -it \
+        --network=host \
+        --privileged \
+        --tmpfs /dev/shm:exec \
+        -v /run/udev:/run/udev:ro \
+        -e MTX_PATHS_CAM_SOURCE=rpiCamera \
+        bluenviron/mediamtx:1-rpi
+        ```
+      </Tab>
+    </Tabs>
+
+    ### Add audio from a USB microphone
+
+    Install GStreamer and ALSA utilities:
+
+    ```bash
+    sudo apt install -y gstreamer1.0-tools gstreamer1.0-rtsp gstreamer1.0-alsa alsa-utils
+    ```
+
+    List available audio cards:
+
+    ```bash
+    arecord -L
+    ```
+
+    Sample output:
+
+    ```
+    surround51:CARD=ICH5,DEV=0
+        Intel ICH5, Intel ICH5
+        5.1 Surround output to Front, Center, Rear and Subwoofer speakers
+    default:CARD=U0x46d0x809
+        USB Device 0x46d:0x809, USB Audio
+        Default Audio Device
+    ```
+
+    Note the card name (e.g. `default:CARD=U0x46d0x809`), then define a combined path in `mediamtx.yml`:
+
+    ```yaml
+    paths:
+      cam:
+        source: rpiCamera
+
+      cam_with_audio:
+        runOnInit: >
+          gst-launch-1.0
+          rtspclientsink name=s location=rtsp://localhost:$RTSP_PORT/cam_with_audio
+          rtspsrc location=rtsp://127.0.0.1:$RTSP_PORT/cam latency=0 ! rtph264depay ! s.
+          alsasrc device=default:CARD=U0x46d0x809 ! opusenc bitrate=16000 ! s.
+        runOnInitRestart: yes
+    ```
+
+    The combined stream becomes available at `/cam_with_audio`.
+
+    ### Secondary stream
+
+    Enable a second stream at a different resolution or codec:
+
+    ```yaml
+    paths:
+      # Primary stream
+      rpi:
+        source: rpiCamera
+        rpiCameraWidth: 1920
+        rpiCameraHeight: 1080
+        rpiCameraFPS: 30
+
+      # Secondary stream
+      secondary:
+        source: rpiCamera
+        rpiCameraSecondary: true
+        rpiCameraWidth: 640
+        rpiCameraHeight: 480
+        rpiCameraFPS: 10
+        rpiCameraCodec: auto
+        rpiCameraMJPEGQuality: 60
+    ```
+
+    The secondary stream becomes available at `/secondary`.
+
+    <Note>
+      Cameras that require a custom `libcamera` build (such as some ArduCam models) are not compatible with precompiled MediaMTX binaries or Docker images. To use a custom `libcamera`, you must compile MediaMTX from source.
+    </Note>
+  </Tab>
+
+  <Tab title="Generic webcam">
+    Any V4L2-compatible webcam on Linux or DirectShow device on Windows can publish to MediaMTX using FFmpeg.
+
+    <Tabs>
+      <Tab title="Linux">
+        Edit `mediamtx.yml`:
+
+        ```yaml
+        paths:
+          cam:
+            runOnInit: ffmpeg -f v4l2 -i /dev/video0 -c:v libx264 -pix_fmt yuv420p -preset ultrafast -b:v 600k -f rtsp rtsp://localhost:$RTSP_PORT/$MTX_PATH
+            runOnInitRestart: yes
+        ```
+
+        The stream becomes available at `/cam`.
+      </Tab>
+
+      <Tab title="Windows">
+        First, find the webcam name:
+
+        ```bash
+        ffmpeg -list_devices true -f dshow -i dummy
+        ```
+
+        Then edit `mediamtx.yml`, replacing `USB2.0 HD UVC WebCam` with the name of your device:
+
+        ```yaml
+        paths:
+          cam:
+            runOnInit: ffmpeg -f dshow -i video="USB2.0 HD UVC WebCam" -c:v libx264 -pix_fmt yuv420p -preset ultrafast -b:v 600k -f rtsp rtsp://localhost:$RTSP_PORT/$MTX_PATH
+            runOnInitRestart: yes
+        ```
+
+        The stream becomes available at `/cam`.
+      </Tab>
+    </Tabs>
+  </Tab>
+</Tabs>

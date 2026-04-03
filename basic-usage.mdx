@@ -1,0 +1,114 @@
+---
+title: "Basic usage"
+description: "Start MediaMTX, publish your first stream, and read it back."
+---
+
+This guide walks you through the core workflow: starting the server, publishing a live stream, and reading it back with a client.
+
+<Steps>
+  <Step title="Start the server">
+    Run the MediaMTX binary directly:
+
+    ```bash
+    ./mediamtx
+    ```
+
+    Or with Docker:
+
+    ```bash
+    docker run --rm -it \
+      -e MTX_RTSPTRANSPORTS=tcp \
+      -e MTX_WEBRTCADDITIONALHOSTS=192.168.x.x \
+      -p 8554:8554 \
+      -p 1935:1935 \
+      -p 8888:8888 \
+      -p 8889:8889 \
+      -p 8890:8890/udp \
+      -p 8189:8189/udp \
+      bluenviron/mediamtx:1
+    ```
+
+    The server starts and listens on all configured protocol ports. By default, RTSP is available on port `8554`, RTMP on `1935`, HLS on `8888`, WebRTC on `8889`/`8189`, and SRT on `8890`.
+  </Step>
+
+  <Step title="Publish a stream">
+    Publish a live stream to the server. The stream is identified by a path — in this example, `mystream`.
+
+    <CodeGroup>
+
+    ```bash FFmpeg
+    ffmpeg -re -stream_loop -1 -i file.mp4 -c copy \
+      -f rtsp rtsp://localhost:8554/mystream
+    ```
+
+    ```bash GStreamer
+    gst-launch-1.0 rtspclientsink name=s location=rtsp://localhost:8554/mystream \
+      filesrc location=file.mp4 \
+      ! qtdemux name=d d.video_0 ! queue ! s.sink_0 d.audio_0 ! queue ! s.sink_1
+    ```
+
+    </CodeGroup>
+
+    Once the publisher connects, MediaMTX makes the stream available on all protocols simultaneously — clients can read it over RTSP, HLS, WebRTC, RTMP, or SRT without any additional configuration.
+  </Step>
+
+  <Step title="Read the stream">
+    Connect a client to the stream using any supported protocol or tool.
+
+    <CodeGroup>
+
+    ```bash VLC
+    vlc --network-caching=50 rtsp://localhost:8554/mystream
+    ```
+
+    ```bash FFmpeg
+    ffmpeg -i rtsp://localhost:8554/mystream -c copy output.mp4
+    ```
+
+    ```bash GStreamer
+    gst-play-1.0 rtsp://localhost:8554/mystream
+    ```
+
+    </CodeGroup>
+
+    You can also open `http://localhost:8888/mystream` in a browser to read the stream via HLS, or `http://localhost:8889/mystream` to read via WebRTC.
+
+    <Tip>
+      Multiple clients can read the same stream simultaneously. MediaMTX handles the fan-out automatically.
+    </Tip>
+  </Step>
+</Steps>
+
+## Path configuration
+
+Each stream is served under a **path** — a named slot on the server. Paths are configured in `mediamtx.yml` under the `paths` key. The simplest configuration accepts any publisher on any path:
+
+```yaml
+paths:
+  all_others:
+```
+
+You can define named paths to apply settings to specific streams:
+
+```yaml
+paths:
+  mystream:
+    # path-specific settings go here
+
+  all_others:
+    # settings applied to all other paths
+```
+
+Path settings include source configuration, authentication, recording, hooks, and more. See the [Configuration](/features/configuration) page for the full reference.
+
+## Hot reloading
+
+You can update `mediamtx.yml` and send `SIGHUP` to reload the configuration without restarting the server or disconnecting existing clients:
+
+```bash
+kill -HUP $(pidof mediamtx)
+```
+
+<Note>
+  Not all configuration changes can be applied without a restart. Changes to protocol listener addresses (such as the RTSP port) require a full server restart.
+</Note>

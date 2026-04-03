@@ -1,0 +1,575 @@
+---
+title: "Sessions API"
+description: "List, inspect, and kick active connections and sessions for RTSP, RTMP, WebRTC, SRT, HLS, and recordings."
+---
+
+The sessions API gives you visibility into all active protocol connections and sessions. For protocols that have a concept of both a TCP connection and a session (like RTSP), both are exposed separately. You can kick any session to forcefully disconnect a client.
+
+<Note>
+  The API must be enabled with `api: true` in `mediamtx.yml`. See the [overview](/api/overview) for setup details.
+</Note>
+
+---
+
+<Tabs>
+  <Tab title="RTSP">
+
+## RTSP connections
+
+RTSP uses persistent TCP connections. A single connection may carry one or more RTSP sessions. Connections and sessions are tracked separately.
+
+### GET /v3/rtspconns/list
+
+Returns a paginated list of all active RTSP connections.
+
+```bash
+curl http://localhost:9997/v3/rtspconns/list
+```
+
+**Query parameters**
+
+<ParamField query="page" type="integer" default="0">Page number (zero-indexed).</ParamField>
+<ParamField query="itemsPerPage" type="integer" default="100">Items per page.</ParamField>
+
+**Response fields**
+
+<ResponseField name="pageCount" type="integer">Total number of pages.</ResponseField>
+<ResponseField name="itemCount" type="integer">Total number of connections.</ResponseField>
+<ResponseField name="items" type="object[]">
+  Array of `RTSPConn` objects.
+  <Expandable title="RTSPConn properties">
+    <ResponseField name="id" type="string">UUID of the connection.</ResponseField>
+    <ResponseField name="created" type="string">ISO 8601 timestamp of when the connection was established.</ResponseField>
+    <ResponseField name="remoteAddr" type="string">Remote IP address and port.</ResponseField>
+    <ResponseField name="session" type="string">UUID of the associated RTSP session, if any. `null` if no session is active on this connection.</ResponseField>
+    <ResponseField name="tunnel" type="string">Tunnel mode identifier (for RTSP-over-HTTP tunneling).</ResponseField>
+    <ResponseField name="inboundBytes" type="integer">Total bytes received from this connection.</ResponseField>
+    <ResponseField name="outboundBytes" type="integer">Total bytes sent to this connection.</ResponseField>
+  </Expandable>
+</ResponseField>
+
+---
+
+### GET /v3/rtspconns/get/{id}
+
+Returns a specific RTSP connection.
+
+```bash
+curl http://localhost:9997/v3/rtspconns/get/a1b2c3d4-0000-0000-0000-000000000000
+```
+
+<ParamField path="id" type="string" required>UUID of the connection.</ParamField>
+
+---
+
+## RTSP sessions
+
+### GET /v3/rtspsessions/list
+
+Returns a paginated list of all active RTSP sessions.
+
+```bash
+curl http://localhost:9997/v3/rtspsessions/list
+```
+
+**Response fields**
+
+<ResponseField name="items" type="object[]">
+  Array of `RTSPSession` objects.
+  <Expandable title="RTSPSession properties">
+    <ResponseField name="id" type="string">UUID of the session.</ResponseField>
+    <ResponseField name="created" type="string">ISO 8601 timestamp of when the session was established.</ResponseField>
+    <ResponseField name="remoteAddr" type="string">Remote IP address and port.</ResponseField>
+    <ResponseField name="state" type="string">Session state. One of `idle`, `read`, `publish`.</ResponseField>
+    <ResponseField name="path" type="string">Path name the session is publishing to or reading from.</ResponseField>
+    <ResponseField name="query" type="string">Query string from the RTSP URL.</ResponseField>
+    <ResponseField name="user" type="string">Authenticated username, if any.</ResponseField>
+    <ResponseField name="transport" type="string">Transport in use: `udp`, `multicast`, or `tcp`. `null` if not yet negotiated.</ResponseField>
+    <ResponseField name="profile" type="string">RTSP profile in use. `null` if not yet negotiated.</ResponseField>
+    <ResponseField name="conns" type="string[]">UUIDs of the underlying RTSP connections.</ResponseField>
+    <ResponseField name="inboundBytes" type="integer">Total bytes received from this session.</ResponseField>
+    <ResponseField name="inboundRTPPackets" type="integer">Total RTP packets received.</ResponseField>
+    <ResponseField name="inboundRTPPacketsLost" type="integer">RTP packets reported as lost.</ResponseField>
+    <ResponseField name="inboundRTPPacketsInError" type="integer">RTP packets that caused a processing error.</ResponseField>
+    <ResponseField name="inboundRTPPacketsJitter" type="number">RTP jitter in seconds.</ResponseField>
+    <ResponseField name="inboundRTCPPackets" type="integer">Total RTCP packets received.</ResponseField>
+    <ResponseField name="inboundRTCPPacketsInError" type="integer">RTCP packets that caused a processing error.</ResponseField>
+    <ResponseField name="outboundBytes" type="integer">Total bytes sent to this session.</ResponseField>
+    <ResponseField name="outboundRTPPackets" type="integer">Total RTP packets sent.</ResponseField>
+    <ResponseField name="outboundRTPPacketsReportedLost" type="integer">RTP packets reported lost by the receiver.</ResponseField>
+    <ResponseField name="outboundRTPPacketsDiscarded" type="integer">RTP packets discarded on sending.</ResponseField>
+    <ResponseField name="outboundRTCPPackets" type="integer">Total RTCP packets sent.</ResponseField>
+  </Expandable>
+</ResponseField>
+
+---
+
+### GET /v3/rtspsessions/get/{id}
+
+Returns a specific RTSP session.
+
+```bash
+curl http://localhost:9997/v3/rtspsessions/get/a1b2c3d4-0000-0000-0000-000000000000
+```
+
+<ParamField path="id" type="string" required>UUID of the session.</ParamField>
+
+---
+
+### POST /v3/rtspsessions/kick/{id}
+
+Forcefully disconnects an RTSP session.
+
+```bash
+curl -X POST http://localhost:9997/v3/rtspsessions/kick/a1b2c3d4-0000-0000-0000-000000000000
+```
+
+<ParamField path="id" type="string" required>UUID of the session to kick.</ParamField>
+
+**Response**
+
+```json
+{ "status": "ok" }
+```
+
+---
+
+## RTSPS connections and sessions
+
+RTSPS (RTSP over TLS) exposes the same endpoints under `/v3/rtspsconns/` and `/v3/rtspssessions/`. The response schemas are identical to the RTSP equivalents.
+
+| Endpoint | Description |
+|----------|-------------|
+| `GET /v3/rtspsconns/list` | List all RTSPS connections |
+| `GET /v3/rtspsconns/get/{id}` | Get a specific RTSPS connection |
+| `GET /v3/rtspssessions/list` | List all RTSPS sessions |
+| `GET /v3/rtspssessions/get/{id}` | Get a specific RTSPS session |
+| `POST /v3/rtspssessions/kick/{id}` | Kick an RTSPS session |
+
+  </Tab>
+  <Tab title="RTMP">
+
+## RTMP connections
+
+RTMP and RTMPS each have a set of connection endpoints. Each connection is either publishing (pushing) a stream or reading (pulling) one.
+
+### GET /v3/rtmpconns/list
+
+Returns a paginated list of all active RTMP connections.
+
+```bash
+curl http://localhost:9997/v3/rtmpconns/list
+```
+
+**Query parameters**
+
+<ParamField query="page" type="integer" default="0">Page number (zero-indexed).</ParamField>
+<ParamField query="itemsPerPage" type="integer" default="100">Items per page.</ParamField>
+
+**Response fields**
+
+<ResponseField name="items" type="object[]">
+  Array of `RTMPConn` objects.
+  <Expandable title="RTMPConn properties">
+    <ResponseField name="id" type="string">UUID of the connection.</ResponseField>
+    <ResponseField name="created" type="string">ISO 8601 timestamp of when the connection was established.</ResponseField>
+    <ResponseField name="remoteAddr" type="string">Remote IP address and port.</ResponseField>
+    <ResponseField name="state" type="string">Connection state. One of `idle`, `read`, `publish`.</ResponseField>
+    <ResponseField name="path" type="string">Path name the connection is on.</ResponseField>
+    <ResponseField name="query" type="string">Query string from the RTMP URL.</ResponseField>
+    <ResponseField name="user" type="string">Authenticated username, if any.</ResponseField>
+    <ResponseField name="inboundBytes" type="integer">Total bytes received from this connection.</ResponseField>
+    <ResponseField name="outboundBytes" type="integer">Total bytes sent to this connection.</ResponseField>
+    <ResponseField name="outboundFramesDiscarded" type="integer">Outbound frames dropped due to slow consumption.</ResponseField>
+  </Expandable>
+</ResponseField>
+
+---
+
+### GET /v3/rtmpconns/get/{id}
+
+Returns a specific RTMP connection.
+
+```bash
+curl http://localhost:9997/v3/rtmpconns/get/a1b2c3d4-0000-0000-0000-000000000000
+```
+
+<ParamField path="id" type="string" required>UUID of the connection.</ParamField>
+
+---
+
+### POST /v3/rtmpconns/kick/{id}
+
+Forcefully disconnects an RTMP connection.
+
+```bash
+curl -X POST http://localhost:9997/v3/rtmpconns/kick/a1b2c3d4-0000-0000-0000-000000000000
+```
+
+<ParamField path="id" type="string" required>UUID of the connection to kick.</ParamField>
+
+**Response**
+
+```json
+{ "status": "ok" }
+```
+
+---
+
+## RTMPS connections
+
+RTMPS (RTMP over TLS) exposes the same endpoints under `/v3/rtmpsconns/`. The response schema is identical to `RTMPConn`.
+
+| Endpoint | Description |
+|----------|-------------|
+| `GET /v3/rtmpsconns/list` | List all RTMPS connections |
+| `GET /v3/rtmpsconns/get/{id}` | Get a specific RTMPS connection |
+| `POST /v3/rtmpsconns/kick/{id}` | Kick an RTMPS connection |
+
+  </Tab>
+  <Tab title="WebRTC">
+
+## WebRTC sessions
+
+WebRTC sessions are created when a client connects via WHIP (publish) or WHEP (read).
+
+### GET /v3/webrtcsessions/list
+
+Returns a paginated list of all active WebRTC sessions.
+
+```bash
+curl http://localhost:9997/v3/webrtcsessions/list
+```
+
+**Query parameters**
+
+<ParamField query="page" type="integer" default="0">Page number (zero-indexed).</ParamField>
+<ParamField query="itemsPerPage" type="integer" default="100">Items per page.</ParamField>
+
+**Response fields**
+
+<ResponseField name="items" type="object[]">
+  Array of `WebRTCSession` objects.
+  <Expandable title="WebRTCSession properties">
+    <ResponseField name="id" type="string">UUID of the session.</ResponseField>
+    <ResponseField name="created" type="string">ISO 8601 timestamp of when the session was created.</ResponseField>
+    <ResponseField name="remoteAddr" type="string">Remote IP address and port.</ResponseField>
+    <ResponseField name="peerConnectionEstablished" type="boolean">Whether the ICE/DTLS handshake completed and media is flowing.</ResponseField>
+    <ResponseField name="localCandidate" type="string">Selected local ICE candidate.</ResponseField>
+    <ResponseField name="remoteCandidate" type="string">Selected remote ICE candidate.</ResponseField>
+    <ResponseField name="state" type="string">Session state. One of `read`, `publish`.</ResponseField>
+    <ResponseField name="path" type="string">Path name the session is on.</ResponseField>
+    <ResponseField name="query" type="string">Query string from the WebRTC URL.</ResponseField>
+    <ResponseField name="user" type="string">Authenticated username, if any.</ResponseField>
+    <ResponseField name="inboundBytes" type="integer">Total bytes received (publish sessions).</ResponseField>
+    <ResponseField name="inboundRTPPackets" type="integer">Total RTP packets received.</ResponseField>
+    <ResponseField name="inboundRTPPacketsLost" type="integer">RTP packets reported as lost by the receiver.</ResponseField>
+    <ResponseField name="inboundRTPPacketsJitter" type="number">RTP jitter in seconds.</ResponseField>
+    <ResponseField name="inboundRTCPPackets" type="integer">Total RTCP packets received.</ResponseField>
+    <ResponseField name="outboundBytes" type="integer">Total bytes sent (read sessions).</ResponseField>
+    <ResponseField name="outboundRTPPackets" type="integer">Total RTP packets sent.</ResponseField>
+    <ResponseField name="outboundRTCPPackets" type="integer">Total RTCP packets sent.</ResponseField>
+    <ResponseField name="outboundFramesDiscarded" type="integer">Outbound frames dropped due to slow consumption.</ResponseField>
+  </Expandable>
+</ResponseField>
+
+---
+
+### GET /v3/webrtcsessions/get/{id}
+
+Returns a specific WebRTC session.
+
+```bash
+curl http://localhost:9997/v3/webrtcsessions/get/a1b2c3d4-0000-0000-0000-000000000000
+```
+
+<ParamField path="id" type="string" required>UUID of the session.</ParamField>
+
+---
+
+### POST /v3/webrtcsessions/kick/{id}
+
+Forcefully disconnects a WebRTC session.
+
+```bash
+curl -X POST http://localhost:9997/v3/webrtcsessions/kick/a1b2c3d4-0000-0000-0000-000000000000
+```
+
+<ParamField path="id" type="string" required>UUID of the session to kick.</ParamField>
+
+**Response**
+
+```json
+{ "status": "ok" }
+```
+
+  </Tab>
+  <Tab title="SRT">
+
+## SRT connections
+
+SRT connections can be either publishing or reading.
+
+### GET /v3/srtconns/list
+
+Returns a paginated list of all active SRT connections.
+
+```bash
+curl http://localhost:9997/v3/srtconns/list
+```
+
+**Query parameters**
+
+<ParamField query="page" type="integer" default="0">Page number (zero-indexed).</ParamField>
+<ParamField query="itemsPerPage" type="integer" default="100">Items per page.</ParamField>
+
+**Response fields**
+
+<ResponseField name="items" type="object[]">
+  Array of `SRTConn` objects.
+  <Expandable title="SRTConn properties">
+    <ResponseField name="id" type="string">UUID of the connection.</ResponseField>
+    <ResponseField name="created" type="string">ISO 8601 timestamp of when the connection was established.</ResponseField>
+    <ResponseField name="remoteAddr" type="string">Remote IP address and port.</ResponseField>
+    <ResponseField name="state" type="string">Connection state. One of `idle`, `read`, `publish`.</ResponseField>
+    <ResponseField name="path" type="string">Path name the connection is on.</ResponseField>
+    <ResponseField name="query" type="string">Query string from the SRT URL.</ResponseField>
+    <ResponseField name="user" type="string">Authenticated username, if any.</ResponseField>
+    <ResponseField name="packetsSent" type="integer">Total DATA packets sent, including retransmissions.</ResponseField>
+    <ResponseField name="packetsReceived" type="integer">Total DATA packets received, including retransmissions.</ResponseField>
+    <ResponseField name="packetsSentUnique" type="integer">Unique DATA packets sent (excluding retransmissions).</ResponseField>
+    <ResponseField name="packetsReceivedUnique" type="integer">Unique DATA packets received and delivered to the application.</ResponseField>
+    <ResponseField name="packetsSendLoss" type="integer">Packets considered lost at the sender side.</ResponseField>
+    <ResponseField name="packetsReceivedLoss" type="integer">Packets detected as missing at the receiver side.</ResponseField>
+    <ResponseField name="packetsRetrans" type="integer">Packets retransmitted by the sender.</ResponseField>
+    <ResponseField name="msRTT" type="number">Smoothed round-trip time (SRTT) in milliseconds.</ResponseField>
+    <ResponseField name="mbpsSendRate" type="number">Current send rate in Mbps.</ResponseField>
+    <ResponseField name="mbpsReceiveRate" type="number">Current receive rate in Mbps.</ResponseField>
+    <ResponseField name="mbpsLinkCapacity" type="number">Estimated network link capacity in Mbps.</ResponseField>
+    <ResponseField name="bytesSent" type="integer">Total bytes sent including all headers.</ResponseField>
+    <ResponseField name="bytesReceived" type="integer">Total bytes received including all headers.</ResponseField>
+    <ResponseField name="packetsSendLossRate" type="number">Percentage of resent data vs. sent data.</ResponseField>
+    <ResponseField name="packetsReceivedLossRate" type="number">Percentage of retransmitted data vs. received data.</ResponseField>
+    <ResponseField name="outboundFramesDiscarded" type="integer">Outbound frames dropped due to slow consumption.</ResponseField>
+  </Expandable>
+</ResponseField>
+
+---
+
+### GET /v3/srtconns/get/{id}
+
+Returns a specific SRT connection.
+
+```bash
+curl http://localhost:9997/v3/srtconns/get/a1b2c3d4-0000-0000-0000-000000000000
+```
+
+<ParamField path="id" type="string" required>UUID of the connection.</ParamField>
+
+---
+
+### POST /v3/srtconns/kick/{id}
+
+Forcefully disconnects an SRT connection.
+
+```bash
+curl -X POST http://localhost:9997/v3/srtconns/kick/a1b2c3d4-0000-0000-0000-000000000000
+```
+
+<ParamField path="id" type="string" required>UUID of the connection to kick.</ParamField>
+
+**Response**
+
+```json
+{ "status": "ok" }
+```
+
+  </Tab>
+  <Tab title="HLS">
+
+## HLS muxers
+
+An HLS muxer is created for each path when a client requests it via the HLS server. It stays alive until no clients have accessed it for a configurable duration (`hlsMuxerCloseAfter`).
+
+### GET /v3/hlsmuxers/list
+
+Returns a paginated list of all active HLS muxers.
+
+```bash
+curl http://localhost:9997/v3/hlsmuxers/list
+```
+
+**Query parameters**
+
+<ParamField query="page" type="integer" default="0">Page number (zero-indexed).</ParamField>
+<ParamField query="itemsPerPage" type="integer" default="100">Items per page.</ParamField>
+
+**Response fields**
+
+<ResponseField name="items" type="object[]">
+  Array of `HLSMuxer` objects.
+  <Expandable title="HLSMuxer properties">
+    <ResponseField name="path" type="string">The path name this muxer serves.</ResponseField>
+    <ResponseField name="created" type="string">ISO 8601 timestamp of when the muxer was created.</ResponseField>
+    <ResponseField name="lastRequest" type="string">ISO 8601 timestamp of the most recent client request.</ResponseField>
+    <ResponseField name="outboundBytes" type="integer">Total bytes sent to HLS clients.</ResponseField>
+    <ResponseField name="outboundFramesDiscarded" type="integer">Frames dropped because they arrived after the HLS segment deadline.</ResponseField>
+  </Expandable>
+</ResponseField>
+
+**Example response**
+
+```json
+{
+  "pageCount": 1,
+  "itemCount": 1,
+  "items": [
+    {
+      "path": "mystream",
+      "created": "2024-11-01T12:00:00Z",
+      "lastRequest": "2024-11-01T12:05:00Z",
+      "outboundBytes": 52428800,
+      "outboundFramesDiscarded": 0
+    }
+  ]
+}
+```
+
+---
+
+### GET /v3/hlsmuxers/get/{name}
+
+Returns a specific HLS muxer by path name.
+
+```bash
+curl http://localhost:9997/v3/hlsmuxers/get/mystream
+```
+
+<ParamField path="name" type="string" required>The path name of the HLS muxer.</ParamField>
+
+<Note>
+  HLS muxers cannot be kicked. To stop HLS delivery for a path, disable the path or disconnect the source.
+</Note>
+
+  </Tab>
+  <Tab title="Recordings">
+
+## Recordings
+
+The recordings API lets you list recorded segments organized by path, retrieve segment lists for a specific path, and delete individual segments.
+
+<Note>
+  Recording must be enabled per path with `record: true` in the path configuration. See [Configuration API](/api/configuration) for details.
+</Note>
+
+### GET /v3/recordings/list
+
+Returns a paginated list of all recordings, grouped by path.
+
+```bash
+curl http://localhost:9997/v3/recordings/list
+```
+
+**Query parameters**
+
+<ParamField query="page" type="integer" default="0">Page number (zero-indexed).</ParamField>
+<ParamField query="itemsPerPage" type="integer" default="100">Items per page.</ParamField>
+
+**Response fields**
+
+<ResponseField name="pageCount" type="integer">Total number of pages.</ResponseField>
+<ResponseField name="itemCount" type="integer">Total number of recorded paths.</ResponseField>
+<ResponseField name="items" type="object[]">
+  Array of `Recording` objects.
+  <Expandable title="Recording properties">
+    <ResponseField name="name" type="string">The path name.</ResponseField>
+    <ResponseField name="segments" type="object[]">
+      List of recording segments for this path.
+      <Expandable title="RecordingSegment properties">
+        <ResponseField name="start" type="string">ISO 8601 timestamp of the segment start time.</ResponseField>
+      </Expandable>
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+**Example response**
+
+```json
+{
+  "pageCount": 1,
+  "itemCount": 1,
+  "items": [
+    {
+      "name": "mystream",
+      "segments": [
+        { "start": "2024-11-01T00:00:00Z" },
+        { "start": "2024-11-01T01:00:00Z" },
+        { "start": "2024-11-01T02:00:00Z" }
+      ]
+    }
+  ]
+}
+```
+
+---
+
+### GET /v3/recordings/get/{name}
+
+Returns all recording segments for a specific path.
+
+```bash
+curl http://localhost:9997/v3/recordings/get/mystream
+```
+
+<ParamField path="name" type="string" required>The path name.</ParamField>
+
+**Response** — a `Recording` object with `name` and `segments` fields (same structure as above).
+
+---
+
+### DELETE /v3/recordings/deletesegment
+
+Deletes a specific recording segment identified by path name and start time.
+
+```bash
+curl -X DELETE \
+  "http://localhost:9997/v3/recordings/deletesegment?path=mystream&start=2024-11-01T00:00:00Z"
+```
+
+**Query parameters**
+
+<ParamField query="path" type="string" required>
+  The path name the segment belongs to.
+</ParamField>
+
+<ParamField query="start" type="string" required>
+  The start timestamp of the segment to delete, as returned in the `segments[].start` field.
+</ParamField>
+
+**Response**
+
+```json
+{ "status": "ok" }
+```
+
+<Warning>
+  Deleting a recording segment is permanent and cannot be undone.
+</Warning>
+
+  </Tab>
+</Tabs>
+
+## Kicking all sessions on a path
+
+To disconnect all clients reading a specific path, list the sessions, filter by path, and kick each one:
+
+```bash
+# Get all RTSP session IDs on "mystream"
+IDS=$(curl -s http://localhost:9997/v3/rtspsessions/list \
+  | jq -r '.items[] | select(.path == "mystream") | .id')
+
+# Kick each session
+for ID in $IDS; do
+  curl -sX POST "http://localhost:9997/v3/rtspsessions/kick/$ID"
+done
+```

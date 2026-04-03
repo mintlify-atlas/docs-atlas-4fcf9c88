@@ -1,0 +1,107 @@
+---
+title: "Always-available streams"
+description: "Keep streams available to readers even when the publisher is offline by playing a looping offline segment."
+keywords: ["always available", "offline segment", "stream placeholder", "alwaysAvailable", "gap fill"]
+---
+
+When a publisher or source is offline, MediaMTX can fill the gap by repeating a looping offline segment. This allows readers to stay connected regardless of whether the stream is active, and the transition between the offline placeholder and the live stream happens without re-encoding.
+
+## How it works
+
+When `alwaysAvailable` is enabled on a path:
+
+1. Readers connect and start receiving the offline segment on a loop.
+2. When a publisher connects and the stream becomes live, the offline segment ends and the live stream begins seamlessly.
+3. If the publisher disconnects again, MediaMTX returns to playing the offline segment.
+
+The offline and live content are concatenated using the original codec — no transcoding occurs.
+
+## Basic configuration
+
+```yaml
+paths:
+  mypath:
+    alwaysAvailable: true
+    alwaysAvailableTracks:
+      - codec: H264
+```
+
+The `alwaysAvailableTracks` list defines which codec tracks the offline segment contains. At least one track must be specified. Available codec values:
+
+| Codec | Additional required fields |
+|---|---|
+| `AV1` | — |
+| `VP9` | — |
+| `H265` | — |
+| `H264` | — |
+| `Opus` | — |
+| `MPEG4Audio` | `sampleRate`, `channelCount` |
+| `G711` | `sampleRate`, `channelCount`, `muLaw` |
+| `LPCM` | `sampleRate`, `channelCount` |
+
+### Audio tracks
+
+For audio codecs that require sample rate and channel count:
+
+```yaml
+paths:
+  mypath:
+    alwaysAvailable: true
+    alwaysAvailableTracks:
+      - codec: H264
+      - codec: MPEG4Audio
+        sampleRate: 48000
+        channelCount: 2
+```
+
+For G711, also specify `muLaw`:
+
+```yaml
+paths:
+  mypath:
+    alwaysAvailable: true
+    alwaysAvailableTracks:
+      - codec: H264
+      - codec: G711
+        sampleRate: 8000
+        channelCount: 1
+        muLaw: false
+```
+
+## Custom offline segment
+
+By default, the server uses a built-in offline segment that displays the text "STREAM IS OFFLINE". You can replace it with your own MP4 file:
+
+```yaml
+paths:
+  mypath:
+    alwaysAvailable: true
+    alwaysAvailableFile: "./offline.mp4"
+```
+
+The MP4 file is looped for as long as the publisher is absent.
+
+<Note>
+  When using `alwaysAvailableFile`, you do not need to set `alwaysAvailableTracks`. The codec information is read from the file.
+</Note>
+
+## Full example
+
+```yaml
+paths:
+  broadcast:
+    alwaysAvailable: true
+    alwaysAvailableTracks:
+      - codec: H264
+      - codec: MPEG4Audio
+        sampleRate: 48000
+        channelCount: 2
+
+  webcam:
+    alwaysAvailable: true
+    alwaysAvailableFile: "./webcam-offline.mp4"
+```
+
+<Tip>
+  Combine `alwaysAvailable` with `runOnReady` and `runOnNotReady` hooks to send notifications when the publisher comes online or goes offline.
+</Tip>

@@ -1,0 +1,80 @@
+---
+title: "Read via RTMP"
+description: "Read live streams from MediaMTX using the RTMP protocol. Supports standard RTMP, encrypted RTMPS, and Enhanced RTMP for modern codecs."
+---
+
+RTMP (Real-Time Messaging Protocol) is a widely supported protocol for reading live streams. MediaMTX supports standard RTMP, encrypted RTMPS, and Enhanced RTMP for AV1, VP9, H265, and other modern codecs.
+
+## Read a stream
+
+Use the following URL to read a stream via RTMP:
+
+```
+rtmp://localhost/mystream
+```
+
+Replace `mystream` with the path name of the stream.
+
+<Note>
+  The default RTMP port is `1935`. The encrypted RTMPS port is `1936`. Both are configurable in `mediamtx.yml` via `rtmpAddress` and `rtmpsAddress`.
+</Note>
+
+## Enhanced RTMP (modern codecs)
+
+Standard RTMP is limited to H264 and AAC. To read streams encoded with AV1, VP9, H265, Opus, AC-3, or multiple video/audio tracks, use the Enhanced RTMP extension by passing the `-rtmp_enhanced_codecs` flag in FFmpeg:
+
+```bash
+ffmpeg -rtmp_enhanced_codecs ac-3,av01,avc1,ec-3,fLaC,hvc1,.mp3,mp4a,Opus,vp09 \
+  -i rtmp://localhost/mystream -c copy output.mp4
+```
+
+## Encryption (RTMPS)
+
+RTMP connections can be encrypted using RTMPS. First, generate a TLS certificate:
+
+```bash
+openssl genrsa -out server.key 2048
+openssl req -new -x509 -sha256 -key server.key -out server.crt -days 3650
+```
+
+Then configure `mediamtx.yml`:
+
+```yaml
+rtmpEncryption: optional
+rtmpServerKey: server.key
+rtmpServerCert: server.crt
+```
+
+Read using the `rtmps` scheme on port `1936`:
+
+```
+rtmps://localhost:1936/mystream
+```
+
+<Warning>
+  RTMPS is currently unsupported by most major players. As a workaround, you can use a local MediaMTX instance to decrypt before reading:
+
+  ```yaml
+  paths:
+    decrypted:
+      source: rtmps://original-stream
+  ```
+
+  Then read `rtmp://localhost/decrypted` instead.
+</Warning>
+
+## Read with FFmpeg
+
+```bash
+ffmpeg -i rtmp://localhost/mystream -c copy output.mp4
+```
+
+## Read with VLC
+
+```bash
+vlc rtmp://localhost/mystream
+```
+
+## Read with OBS Studio
+
+OBS Studio does not support reading RTMP streams directly as a media source. Use RTSP instead — see [Read via RTSP](/read/rtsp).

@@ -1,0 +1,219 @@
+---
+title: "Metrics"
+description: "Expose Prometheus-compatible metrics from MediaMTX to monitor active paths, connections, and protocol-level statistics."
+keywords: ["metrics", "prometheus", "monitoring", "observability", "grafana"]
+---
+
+MediaMTX exposes a dedicated HTTP endpoint that serves metrics in [Prometheus](https://prometheus.io/) exposition format. You can scrape this endpoint with Prometheus or query it directly with `curl`.
+
+## Enabling metrics
+
+```yaml mediamtx.yml
+# Allow clients to extract Prometheus-compatible metrics.
+metrics: true
+# Address of the metrics HTTP listener.
+metricsAddress: :9998
+```
+
+Verify the endpoint is up:
+
+```bash
+curl http://localhost:9998/metrics
+```
+
+## Security
+
+### TLS encryption
+
+```bash
+openssl genrsa -out server.key 2048
+openssl req -new -x509 -sha256 -key server.key -out server.crt -days 3650
+```
+
+```yaml mediamtx.yml
+metricsEncryption: true
+metricsServerKey: server.key
+metricsServerCert: server.crt
+```
+
+### CORS and trusted proxies
+
+```yaml mediamtx.yml
+# Allowed CORS origins. Supports wildcards.
+metricsAllowOrigins: ['https://grafana.example.com']
+
+# IPs or CIDRs of proxies placed before the metrics server.
+metricsTrustedProxies: ['10.0.0.0/8']
+```
+
+### Authentication
+
+Metrics access uses the `metrics` action in the authentication system. By default, requests from `127.0.0.1` and `::1` are allowed without credentials.
+
+To require credentials, define a user with the `metrics` permission:
+
+```yaml mediamtx.yml
+authInternalUsers:
+  - user: prometheus
+    pass: scrapepassword
+    ips: []
+    permissions:
+      - action: metrics
+```
+
+<Note>
+When using HTTP or JWT authentication modes, the `metrics` action is excluded from external auth checks by default. Add `metrics` to `authHTTPExclude` / `authJWTExclude` to control this behavior.
+</Note>
+
+---
+
+## Available metrics
+
+### Paths
+
+```ini
+# Presence of a path (value is always 1 when the path exists)
+paths{name="[path_name]",state="[state]"} 1
+
+# Bytes received and sent on a path
+paths_bytes_received{name="[path_name]",state="[state]"} 1234
+paths_bytes_sent{name="[path_name]",state="[state]"} 1234
+
+# Number of readers on a path
+paths_readers{name="[path_name]",state="[state]"} 1234
+```
+
+### HLS muxers
+
+```ini
+hls_muxers{name="[name]"} 1
+hls_muxers_bytes_sent{name="[name]"} 187
+```
+
+### RTSP connections and sessions
+
+```ini
+# Per-connection byte counters
+rtsp_conns{id="[id]"} 1
+rtsp_conns_bytes_received{id="[id]"} 1234
+rtsp_conns_bytes_sent{id="[id]"} 187
+
+# Per-session packet and byte counters
+rtsp_sessions{id="[id]",path="[path]",remoteAddr="[remoteAddr]",state="[state]"} 1
+rtsp_sessions_bytes_received{...} 1234
+rtsp_sessions_bytes_sent{...} 187
+rtsp_sessions_rtp_packets_received{...} 123
+rtsp_sessions_rtp_packets_sent{...} 123
+rtsp_sessions_rtp_packets_lost{...} 123
+rtsp_sessions_rtp_packets_in_error{...} 123
+rtsp_sessions_rtp_packets_jitter{...} 123
+rtsp_sessions_rtcp_packets_received{...} 123
+rtsp_sessions_rtcp_packets_sent{...} 123
+rtsp_sessions_rtcp_packets_in_error{...} 123
+```
+
+The same metrics are available for RTSPS sessions under the `rtsps_conns` and `rtsps_sessions` prefixes.
+
+### RTMP / RTMPS connections
+
+```ini
+rtmp_conns{id="[id]",path="[path]",remoteAddr="[remoteAddr]",state="[state]"} 1
+rtmp_conns_bytes_received{...} 1234
+rtmp_conns_bytes_sent{...} 187
+
+# RTMPS uses the same structure under rtmps_conns
+rtmps_conns{...} 1
+rtmps_conns_bytes_received{...} 1234
+rtmps_conns_bytes_sent{...} 187
+```
+
+### SRT connections
+
+SRT exposes detailed transport statistics per connection:
+
+```ini
+srt_conns{id="[id]",path="[path]",remoteAddr="[remoteAddr]",state="[state]"} 1
+srt_conns_packets_sent{...} 123
+srt_conns_packets_received{...} 123
+srt_conns_packets_sent_unique{...} 123
+srt_conns_packets_received_unique{...} 123
+srt_conns_packets_send_loss{...} 123
+srt_conns_packets_received_loss{...} 123
+srt_conns_packets_retrans{...} 123
+srt_conns_bytes_sent{...} 187
+srt_conns_bytes_received{...} 1234
+srt_conns_ms_rtt{...} 123.123
+srt_conns_mbps_send_rate{...} 123
+srt_conns_mbps_receive_rate{...} 123.123
+srt_conns_mbps_link_capacity{...} 123.123
+# ... and many more SRT-specific transport counters
+```
+
+### WebRTC sessions
+
+```ini
+webrtc_sessions{id="[id]",path="[path]",remoteAddr="[remoteAddr]",state="[state]"} 1
+webrtc_sessions_bytes_received{...} 1234
+webrtc_sessions_bytes_sent{...} 187
+webrtc_sessions_rtp_packets_received{...} 123
+webrtc_sessions_rtp_packets_sent{...} 123
+webrtc_sessions_rtp_packets_lost{...} 123
+webrtc_sessions_rtp_packets_jitter{...} 123
+webrtc_sessions_rtcp_packets_received{...} 123
+webrtc_sessions_rtcp_packets_sent{...} 123
+```
+
+<Note>
+Bitrate metrics are not provided directly. Compute them in your metrics analyzer (for example, using Grafana's `rate()` function on the `bytes_received` or `bytes_sent` counters).
+</Note>
+
+---
+
+## Filtering metrics
+
+Reduce response size by scoping the query to a specific type or resource using HTTP query parameters:
+
+| Parameter | Example | Description |
+|-----------|---------|-------------|
+| `type` | `type=paths` | Show only metrics of a given type |
+| `path` | `path=mystream` | Show metrics for a specific path |
+| `hls_muxer` | `hls_muxer=mystream` | Show metrics for a specific HLS muxer |
+| `rtsp_conn` | `rtsp_conn=abc123` | Show metrics for a specific RTSP connection |
+| `rtsp_session` | `rtsp_session=abc123` | Show metrics for a specific RTSP session |
+| `rtsps_conn` | `rtsps_conn=abc123` | Show metrics for a specific RTSPS connection |
+| `rtsps_session` | `rtsps_session=abc123` | Show metrics for a specific RTSPS session |
+| `rtmp_conn` | `rtmp_conn=abc123` | Show metrics for a specific RTMP connection |
+| `rtmps_conn` | `rtmps_conn=abc123` | Show metrics for a specific RTMPS connection |
+| `srt_conn` | `srt_conn=abc123` | Show metrics for a specific SRT connection |
+| `webrtc_session` | `webrtc_session=abc123` | Show metrics for a specific WebRTC session |
+
+Valid values for `type`: `paths`, `hls_muxers`, `rtsp_conns`, `rtsp_sessions`, `rtsps_conns`, `rtsps_sessions`, `rtmp_conns`, `rtmps_conns`, `srt_conns`, `webrtc_sessions`.
+
+```bash
+# Show only path metrics
+curl "http://localhost:9998/metrics?type=paths"
+
+# Show metrics for a single path
+curl "http://localhost:9998/metrics?path=mystream"
+```
+
+---
+
+## Scraping with Prometheus
+
+Add a scrape job to your `prometheus.yml`:
+
+```yaml prometheus.yml
+scrape_configs:
+  - job_name: mediamtx
+    static_configs:
+      - targets: ['localhost:9998']
+    # If you enabled authentication:
+    # basic_auth:
+    #   username: prometheus
+    #   password: scrapepassword
+```
+
+<Tip>
+Pair MediaMTX metrics with Grafana for dashboards. Use `rate(paths_bytes_received[1m])` to derive per-path ingest bitrate, and `rate(rtsp_sessions_rtp_packets_lost[1m])` to track packet loss over time.
+</Tip>

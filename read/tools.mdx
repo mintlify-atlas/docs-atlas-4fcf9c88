@@ -1,0 +1,344 @@
+---
+title: "Reading with popular tools"
+description: "Step-by-step instructions for reading MediaMTX streams with FFmpeg, GStreamer, VLC, OBS Studio, Python/OpenCV, Go, Unity, and web browsers."
+---
+
+Instructions for reading streams from MediaMTX using common tools and programming environments.
+
+<Tabs>
+  <Tab title="FFmpeg">
+    FFmpeg can read streams from MediaMTX in several ways. The recommended approach is RTSP.
+
+    ### RTSP (recommended)
+
+    ```bash
+    ffmpeg -i rtsp://localhost:8554/mystream -c copy output.mp4
+    ```
+
+    To force TCP transport (more reliable through firewalls and NATs):
+
+    ```bash
+    ffmpeg -rtsp_transport tcp -i rtsp://localhost:8554/mystream -c copy output.mp4
+    ```
+
+    ### RTMP
+
+    ```bash
+    ffmpeg -i rtmp://localhost/mystream -c copy output.mp4
+    ```
+
+    To read AV1, VP9, H265, Opus, AC-3 tracks, or multiple video/audio tracks, include the `-rtmp_enhanced_codecs` flag:
+
+    ```bash
+    ffmpeg -rtmp_enhanced_codecs ac-3,av01,avc1,ec-3,fLaC,hvc1,.mp3,mp4a,Opus,vp09 \
+      -i rtmp://localhost/mystream -c copy output.mp4
+    ```
+
+    ### SRT
+
+    ```bash
+    ffmpeg -i 'srt://localhost:8890?streamid=read:mystream' -c copy output.mp4
+    ```
+  </Tab>
+
+  <Tab title="GStreamer">
+    GStreamer can read streams from MediaMTX in several ways. The recommended approach is RTSP.
+
+    ### RTSP (recommended)
+
+    ```bash
+    gst-launch-1.0 rtspsrc location=rtsp://127.0.0.1:8554/mystream latency=0 ! decodebin ! autovideosink
+    ```
+
+    ### WebRTC / WHEP
+
+    GStreamer supports reading via WebRTC using the `whepsrc` element. Track codecs must be declared in advance. If audio is not present, `audio-caps` must still be set and must reference PCMU.
+
+    **Video-only H264 stream:**
+
+    ```bash
+    gst-launch-1.0 whepsrc whep-endpoint=http://127.0.0.1:8889/mystream/whep use-link-headers=true \
+      video-caps="application/x-rtp,media=video,encoding-name=H264,payload=127,clock-rate=90000" \
+      audio-caps="application/x-rtp,media=audio,encoding-name=PCMU,payload=0,clock-rate=8000" \
+      ! rtph264depay ! decodebin ! autovideosink
+    ```
+
+    **Audio-only Opus stream:**
+
+    ```bash
+    gst-launch-1.0 whepsrc whep-endpoint="http://127.0.0.1:8889/mystream/whep" use-link-headers=true \
+      audio-caps="application/x-rtp,media=audio,encoding-name=OPUS,payload=111,clock-rate=48000,encoding-params=(string)2" \
+      ! rtpopusdepay ! decodebin ! autoaudiosink
+    ```
+
+    **H264 video and Opus audio:**
+
+    ```bash
+    gst-launch-1.0 whepsrc whep-endpoint=http://127.0.0.1:8889/mystream/whep use-link-headers=true \
+      video-caps="application/x-rtp,media=video,encoding-name=H264,payload=127,clock-rate=90000" \
+      audio-caps="application/x-rtp,media=audio,encoding-name=OPUS,payload=111,clock-rate=48000,encoding-params=(string)2" \
+      ! decodebin ! autovideosink
+    ```
+  </Tab>
+
+  <Tab title="VLC">
+    VLC can read streams from MediaMTX in several ways. The recommended approach is RTSP.
+
+    ### RTSP (recommended)
+
+    ```bash
+    vlc --network-caching=50 rtsp://localhost:8554/mystream
+    ```
+
+    Force TCP transport (more reliable through NATs and firewalls):
+
+    ```bash
+    vlc --network-caching=50 --rtsp-tcp rtsp://localhost:8554/mystream
+    ```
+
+    Use UDP-multicast (for LAN multicast streams):
+
+    ```bash
+    vlc --network-caching=50 rtsp://localhost:8554/mystream?vlcmulticast
+    ```
+
+    ### HLS
+
+    ```bash
+    vlc http://localhost:8888/mystream/index.m3u8
+    ```
+
+    <Note>
+      The VLC package included in Ubuntu 21.10 and later does not support RTSP due to a licensing issue. If RTSP playback fails, reinstall using the snap package:
+
+      ```bash
+      sudo apt purge -y vlc
+      snap install vlc
+      ```
+    </Note>
+
+    <Warning>
+      VLC does not support reading encrypted RTSP streams (RTSPS). Use a local MediaMTX instance, stunnel, or nginx to decrypt streams before reading with VLC.
+    </Warning>
+  </Tab>
+
+  <Tab title="OBS Studio">
+    OBS Studio can read streams from MediaMTX using the RTSP protocol as a media source.
+
+    <Steps>
+      <Step title="Add a Media Source">
+        In the **Sources** panel, click **+**, select **Media Source**, then click **OK**.
+      </Step>
+      <Step title="Configure the input">
+        Uncheck **Local file**, then enter the stream URL in the **Input** field:
+
+        ```
+        rtsp://localhost:8554/mystream
+        ```
+      </Step>
+      <Step title="Confirm">
+        Click **OK**. OBS will connect to the stream and begin playback.
+      </Step>
+    </Steps>
+  </Tab>
+
+  <Tab title="Python / OpenCV">
+    Python applications can read streams from MediaMTX using the OpenCV library, which acts as an RTSP client.
+
+    ```python
+    import cv2
+
+    cap = cv2.VideoCapture('rtsp://localhost:8554/mystream')
+    if not cap.isOpened():
+        raise Exception("can't open video capture")
+
+    while True:
+        ret, frame = cap.read()
+        if not ret:
+            raise Exception("can't receive frame")
+
+        cv2.imshow('frame', frame)
+
+        if cv2.waitKey(1) == ord('q'):
+            break
+
+    cap.release()
+    cv2.destroyAllWindows()
+    ```
+
+    Press `q` to stop playback.
+  </Tab>
+
+  <Tab title="Go">
+    Go applications can read streams from MediaMTX using libraries maintained by the same project:
+
+    - [gortsplib](https://github.com/bluenviron/gortsplib) — read via RTSP
+    - [gortmplib](https://github.com/bluenviron/gortmplib) — read via RTMP
+    - [gohlslib](https://github.com/bluenviron/gohlslib) — read via HLS
+
+    These libraries power MediaMTX itself. Each repository contains working examples for connecting to a server and consuming streams.
+  </Tab>
+
+  <Tab title="Unity">
+    Unity applications can read streams from MediaMTX using the WebRTC protocol via the `com.unity.webrtc` package.
+
+    <Steps>
+      <Step title="Install the WebRTC package">
+        Open **Window → Package Manager**, click **+**, select **Add Package by name...**, and enter `com.unity.webrtc`. Wait for installation to complete.
+      </Step>
+      <Step title="Create a reader script">
+        In the **Project** window under `Assets`, create a new C# script called `WebRTCReader.cs` with the following content:
+
+        ```cs
+        using System.Collections;
+        using UnityEngine;
+        using Unity.WebRTC;
+
+        public class WebRTCReader : MonoBehaviour
+        {
+            public string url = "http://localhost:8889/mystream/whep";
+
+            private RTCPeerConnection pc;
+            private MediaStream receiveStream;
+
+            void Start()
+            {
+                UnityEngine.UI.RawImage rawImage = gameObject.GetComponentInChildren<UnityEngine.UI.RawImage>();
+                AudioSource audioSource = gameObject.GetComponentInChildren<AudioSource>();
+                pc = new RTCPeerConnection();
+                receiveStream = new MediaStream();
+
+                pc.OnTrack = e =>
+                {
+                    receiveStream.AddTrack(e.Track);
+                };
+
+                receiveStream.OnAddTrack = e =>
+                {
+                    if (e.Track is VideoStreamTrack videoTrack)
+                    {
+                        videoTrack.OnVideoReceived += (tex) =>
+                        {
+                            rawImage.texture = tex;
+                        };
+                    }
+                    else if (e.Track is AudioStreamTrack audioTrack)
+                    {
+                        audioSource.SetTrack(audioTrack);
+                        audioSource.loop = true;
+                        audioSource.Play();
+                    }
+                };
+
+                RTCRtpTransceiverInit init = new RTCRtpTransceiverInit();
+                init.direction = RTCRtpTransceiverDirection.RecvOnly;
+                pc.AddTransceiver(TrackKind.Audio, init);
+                pc.AddTransceiver(TrackKind.Video, init);
+
+                StartCoroutine(WebRTC.Update());
+                StartCoroutine(createOffer());
+            }
+
+            private IEnumerator createOffer()
+            {
+                var op = pc.CreateOffer();
+                yield return op;
+                if (op.IsError) {
+                    Debug.LogError("CreateOffer() failed");
+                    yield break;
+                }
+
+                yield return setLocalDescription(op.Desc);
+            }
+
+            private IEnumerator setLocalDescription(RTCSessionDescription offer)
+            {
+                var op = pc.SetLocalDescription(ref offer);
+                yield return op;
+                if (op.IsError) {
+                    Debug.LogError("SetLocalDescription() failed");
+                    yield break;
+                }
+
+                yield return postOffer(offer);
+            }
+
+            private IEnumerator postOffer(RTCSessionDescription offer)
+            {
+                var content = new System.Net.Http.StringContent(offer.sdp);
+                content.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("application/sdp");
+                var client = new System.Net.Http.HttpClient();
+
+                var task = System.Threading.Tasks.Task.Run(async () => {
+                    var res = await client.PostAsync(new System.UriBuilder(url).Uri, content);
+                    res.EnsureSuccessStatusCode();
+                    return await res.Content.ReadAsStringAsync();
+                });
+                yield return new WaitUntil(() => task.IsCompleted);
+                if (task.Exception != null) {
+                    Debug.LogError(task.Exception);
+                    yield break;
+                }
+
+                yield return setRemoteDescription(task.Result);
+            }
+
+            private IEnumerator setRemoteDescription(string answer)
+            {
+                RTCSessionDescription desc = new RTCSessionDescription();
+                desc.type = RTCSdpType.Answer;
+                desc.sdp = answer;
+                var op = pc.SetRemoteDescription(ref desc);
+                yield return op;
+                if (op.IsError) {
+                    Debug.LogError("SetRemoteDescription() failed");
+                    yield break;
+                }
+
+                yield break;
+            }
+
+            void OnDestroy()
+            {
+                pc?.Close();
+                pc?.Dispose();
+                receiveStream?.Dispose();
+            }
+        }
+        ```
+
+        Update the `url` variable to match your stream path.
+      </Step>
+      <Step title="Set up the scene">
+        In the **Hierarchy** window, find or create a scene. Inside the scene, add a **Canvas**. Inside the Canvas, add a **Raw Image** and an **Audio Source**. Drag `WebRTCReader.cs` onto the Canvas in the **Inspector** window.
+      </Step>
+      <Step title="Play">
+        Press the **Play** button at the top of the editor to start reading the stream.
+      </Step>
+    </Steps>
+  </Tab>
+
+  <Tab title="Web browsers">
+    Web browsers can read streams from MediaMTX in two ways.
+
+    ### WebRTC (low latency)
+
+    Visit the built-in player page for the stream:
+
+    ```
+    http://localhost:8889/mystream
+    ```
+
+    WebRTC provides the lowest latency but may have connectivity issues in restrictive network environments. See [Read via WebRTC](/read/webrtc) for troubleshooting.
+
+    ### HLS (high compatibility)
+
+    Visit the built-in HLS player page:
+
+    ```
+    http://localhost:8888/mystream
+    ```
+
+    HLS has higher latency than WebRTC but works reliably in all network environments, supports CDN distribution for large-scale deployments, and is compatible with virtually all browsers and devices.
+  </Tab>
+</Tabs>

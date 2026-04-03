@@ -1,0 +1,208 @@
+---
+title: "Paths API"
+description: "List and inspect active stream paths, including their sources, tracks, readers, and traffic statistics."
+---
+
+A **path** is a named stream endpoint in MediaMTX. Paths are identified by a string name (e.g. `mystream`, `camera1`). A path becomes active when it has a publisher (a client pushing media) or a configured pull source. Readers connect to active paths to consume the stream.
+
+The paths API lets you inspect all currently active paths and their runtime state.
+
+<Note>
+  This API returns **runtime state** — active paths with live data. To read or update path **configuration**, use the [Configuration API](/api/configuration).
+</Note>
+
+## Endpoints
+
+### GET /v3/paths/list
+
+Returns a paginated list of all active paths.
+
+```bash
+curl http://localhost:9997/v3/paths/list
+```
+
+**Query parameters**
+
+<ParamField query="page" type="integer" default="0">
+  Page number (zero-indexed).
+</ParamField>
+
+<ParamField query="itemsPerPage" type="integer" default="100">
+  Number of items per page.
+</ParamField>
+
+**Response**
+
+<ResponseField name="pageCount" type="integer">
+  Total number of pages.
+</ResponseField>
+
+<ResponseField name="itemCount" type="integer">
+  Total number of active paths.
+</ResponseField>
+
+<ResponseField name="items" type="object[]">
+  Array of `Path` objects.
+</ResponseField>
+
+**Example response**
+
+```json
+{
+  "pageCount": 1,
+  "itemCount": 2,
+  "items": [
+    {
+      "name": "mystream",
+      "confName": "mystream",
+      "source": {
+        "type": "rtspSession",
+        "id": "a1b2c3d4-0000-0000-0000-000000000000"
+      },
+      "available": true,
+      "availableTime": "2024-11-01T12:00:00Z",
+      "online": true,
+      "onlineTime": "2024-11-01T12:00:00Z",
+      "tracks2": [
+        { "codec": "H264", "codecProps": { "width": 1920, "height": 1080, "profile": "High", "level": "4.0" } },
+        { "codec": "MPEG-4 Audio", "codecProps": { "sampleRate": 44100, "channelCount": 2 } }
+      ],
+      "inboundBytes": 125829120,
+      "outboundBytes": 251658240,
+      "readers": [
+        { "type": "hlsMuxer", "id": "mystream" },
+        { "type": "webRTCSession", "id": "e5f6g7h8-0000-0000-0000-000000000000" }
+      ]
+    }
+  ]
+}
+```
+
+---
+
+### GET /v3/paths/get/{name}
+
+Returns the runtime state of a specific path.
+
+```bash
+curl http://localhost:9997/v3/paths/get/mystream
+```
+
+**Path parameters**
+
+<ParamField path="name" type="string" required>
+  The name of the path (e.g. `mystream`).
+</ParamField>
+
+**Response** — `Path` object
+
+<ResponseField name="name" type="string">
+  The path name as used in connection URLs.
+</ResponseField>
+
+<ResponseField name="confName" type="string">
+  The name of the configuration entry this path matched. May differ from `name` if wildcard path configurations are used (e.g. a config for `camera~` matching `camera1`).
+</ResponseField>
+
+<ResponseField name="source" type="object" >
+  The current source of the stream. `null` if there is no active publisher.
+  <Expandable title="properties">
+    <ResponseField name="type" type="string">
+      Source type. One of: `rtspSession`, `rtspsSession`, `rtmpConn`, `rtmpsConn`, `webRTCSession`, `srtConn`, `rtspSource`, `rtmpSource`, `hlsSource`, `webRTCSource`, `srtSource`, `mpegtsSource`, `rtpSource`, `rpiCameraSource`, `redirect`.
+    </ResponseField>
+    <ResponseField name="id" type="string">
+      The UUID or name of the source connection or session.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="available" type="boolean">
+  Whether the path currently has media available (has a source with tracks).
+</ResponseField>
+
+<ResponseField name="availableTime" type="string">
+  ISO 8601 timestamp of when the path became available. `null` if not available.
+</ResponseField>
+
+<ResponseField name="online" type="boolean">
+  Whether the path is online (has an active publisher or source).
+</ResponseField>
+
+<ResponseField name="onlineTime" type="string">
+  ISO 8601 timestamp of when the path came online. `null` if offline.
+</ResponseField>
+
+<ResponseField name="tracks2" type="object[]">
+  List of media tracks carried by the stream.
+  <Expandable title="properties">
+    <ResponseField name="codec" type="string">
+      Codec name. One of: `AV1`, `VP9`, `VP8`, `H265`, `H264`, `MPEG-4 Video`, `MPEG-1/2 Video`, `M-JPEG`, `Opus`, `Vorbis`, `MPEG-4 Audio`, `MPEG-4 Audio LATM`, `MPEG-1/2 Audio`, `AC3`, `Speex`, `G726`, `G722`, `G711`, `LPCM`, `MPEG-TS`, `KLV`, `Generic`.
+    </ResponseField>
+    <ResponseField name="codecProps" type="object">
+      Codec-specific properties (resolution, sample rate, channel count, etc.). Structure depends on `codec`.
+      <Expandable title="H264 / H265 properties">
+        <ResponseField name="width" type="integer">Frame width in pixels.</ResponseField>
+        <ResponseField name="height" type="integer">Frame height in pixels.</ResponseField>
+        <ResponseField name="profile" type="string">Codec profile (e.g. `"High"`).</ResponseField>
+        <ResponseField name="level" type="string">Codec level (e.g. `"4.0"`).</ResponseField>
+      </Expandable>
+      <Expandable title="AV1 properties">
+        <ResponseField name="width" type="integer">Frame width in pixels.</ResponseField>
+        <ResponseField name="height" type="integer">Frame height in pixels.</ResponseField>
+        <ResponseField name="profile" type="integer">AV1 profile.</ResponseField>
+        <ResponseField name="level" type="integer">AV1 level.</ResponseField>
+        <ResponseField name="tier" type="integer">AV1 tier.</ResponseField>
+      </Expandable>
+      <Expandable title="Opus / MPEG-4 Audio / AC3 properties">
+        <ResponseField name="sampleRate" type="integer">Sample rate in Hz.</ResponseField>
+        <ResponseField name="channelCount" type="integer">Number of audio channels.</ResponseField>
+      </Expandable>
+      <Expandable title="G711 properties">
+        <ResponseField name="muLaw" type="boolean">Whether the codec uses µ-law (true) or A-law (false).</ResponseField>
+        <ResponseField name="sampleRate" type="integer">Sample rate in Hz.</ResponseField>
+        <ResponseField name="channelCount" type="integer">Number of channels.</ResponseField>
+      </Expandable>
+      <Expandable title="LPCM properties">
+        <ResponseField name="bitDepth" type="integer">Bit depth (e.g. 16, 24).</ResponseField>
+        <ResponseField name="sampleRate" type="integer">Sample rate in Hz.</ResponseField>
+        <ResponseField name="channelCount" type="integer">Number of channels.</ResponseField>
+      </Expandable>
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="inboundBytes" type="integer">
+  Total bytes received from the source since the path became available.
+</ResponseField>
+
+<ResponseField name="outboundBytes" type="integer">
+  Total bytes sent to all readers since the path became available.
+</ResponseField>
+
+<ResponseField name="inboundFramesInError" type="integer">
+  Number of inbound frames that encountered errors during processing.
+</ResponseField>
+
+<ResponseField name="readers" type="object[]">
+  List of active readers consuming this path.
+  <Expandable title="properties">
+    <ResponseField name="type" type="string">
+      Reader type. One of: `hlsMuxer`, `rtspSession`, `rtspsSession`, `rtspConn`, `rtspsConn`, `rtmpConn`, `rtmpsConn`, `webRTCSession`, `srtConn`, `rpiCameraSecondary`.
+    </ResponseField>
+    <ResponseField name="id" type="string">
+      The UUID or name identifying the reader.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+## Polling for path availability
+
+You can poll `GET /v3/paths/get/{name}` and check `available: true` to wait until a path has media before directing a client to it:
+
+```bash
+until curl -sf http://localhost:9997/v3/paths/get/mystream \
+  | grep -q '"available":true'; do
+  sleep 1
+done
+echo "Stream is ready"
+```

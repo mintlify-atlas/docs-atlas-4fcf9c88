@@ -1,0 +1,448 @@
+---
+title: "Configuration API"
+description: "Read and update global server configuration and per-path configuration at runtime without restarting MediaMTX."
+---
+
+The configuration API lets you inspect and modify the full server configuration at runtime. Changes take effect immediately. All endpoints are under `/v3/config/`.
+
+<Note>
+  The API must be enabled with `api: true` in `mediamtx.yml`. See the [overview](/api/overview) for authentication and setup details.
+</Note>
+
+## Global configuration
+
+### GET /v3/config/global/get
+
+Returns the current global server configuration.
+
+```bash
+curl http://localhost:9997/v3/config/global/get
+```
+
+**Response** — `GlobalConf` object:
+
+<ResponseField name="logLevel" type="string">
+  Logging verbosity. One of `error`, `warn`, `info`, `debug`.
+</ResponseField>
+
+<ResponseField name="logDestinations" type="string[]">
+  Where logs are written. Any combination of `stdout`, `file`, `syslog`.
+</ResponseField>
+
+<ResponseField name="logFile" type="string">
+  Path to the log file when `file` is in `logDestinations`.
+</ResponseField>
+
+<ResponseField name="readTimeout" type="string">
+  Timeout for reading data from clients (e.g. `"10s"`).
+</ResponseField>
+
+<ResponseField name="writeTimeout" type="string">
+  Timeout for writing data to clients (e.g. `"10s"`).
+</ResponseField>
+
+<ResponseField name="writeQueueSize" type="integer">
+  Size of the write queue for each connection.
+</ResponseField>
+
+<ResponseField name="udpMaxPayloadSize" type="integer">
+  Maximum UDP payload size in bytes.
+</ResponseField>
+
+<ResponseField name="runOnConnect" type="string">
+  Command to run when a client connects.
+</ResponseField>
+
+<ResponseField name="runOnDisconnect" type="string">
+  Command to run when a client disconnects.
+</ResponseField>
+
+<ResponseField name="authMethod" type="string">
+  Authentication method. One of `internal`, `http`, `jwt`.
+</ResponseField>
+
+<ResponseField name="authInternalUsers" type="object[]">
+  List of internal users for authentication.
+  <Expandable title="properties">
+    <ResponseField name="user" type="string">Username.</ResponseField>
+    <ResponseField name="pass" type="string">Password.</ResponseField>
+    <ResponseField name="ips" type="string[]">Allowed source IPs. Empty means all.</ResponseField>
+    <ResponseField name="permissions" type="object[]">
+      List of allowed actions.
+      <Expandable title="properties">
+        <ResponseField name="action" type="string">
+          One of `publish`, `read`, `playback`, `api`, `metrics`, `pprof`.
+        </ResponseField>
+        <ResponseField name="path" type="string">
+          Path name pattern the action applies to. Empty means all paths.
+        </ResponseField>
+      </Expandable>
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="api" type="boolean">
+  Whether the Control API is enabled.
+</ResponseField>
+
+<ResponseField name="apiAddress" type="string">
+  Address the API listens on (e.g. `":9997"`).
+</ResponseField>
+
+<ResponseField name="rtsp" type="boolean">
+  Whether the RTSP server is enabled.
+</ResponseField>
+
+<ResponseField name="rtspAddress" type="string">
+  Address the RTSP server listens on.
+</ResponseField>
+
+<ResponseField name="rtspEncryption" type="string">
+  RTSP encryption mode. One of `no`, `optional`, `strict`.
+</ResponseField>
+
+<ResponseField name="rtmp" type="boolean">
+  Whether the RTMP server is enabled.
+</ResponseField>
+
+<ResponseField name="rtmpAddress" type="string">
+  Address the RTMP server listens on.
+</ResponseField>
+
+<ResponseField name="hls" type="boolean">
+  Whether the HLS server is enabled.
+</ResponseField>
+
+<ResponseField name="hlsAddress" type="string">
+  Address the HLS server listens on.
+</ResponseField>
+
+<ResponseField name="hlsVariant" type="string">
+  HLS output variant. One of `mpegts`, `fmp4`, `lowLatency`.
+</ResponseField>
+
+<ResponseField name="webrtc" type="boolean">
+  Whether the WebRTC server is enabled.
+</ResponseField>
+
+<ResponseField name="webrtcAddress" type="string">
+  Address the WebRTC server listens on.
+</ResponseField>
+
+<ResponseField name="srt" type="boolean">
+  Whether the SRT server is enabled.
+</ResponseField>
+
+<ResponseField name="srtAddress" type="string">
+  Address the SRT server listens on.
+</ResponseField>
+
+---
+
+### PATCH /v3/config/global/patch
+
+Updates the global configuration. All fields are optional — only the fields you include are changed.
+
+```bash
+curl -X PATCH http://localhost:9997/v3/config/global/patch \
+  -H 'Content-Type: application/json' \
+  -d '{"logLevel": "debug"}'
+```
+
+**Request body** — partial `GlobalConf` object. Include only the fields you want to change.
+
+<ParamField body="logLevel" type="string">
+  Set to `error`, `warn`, `info`, or `debug`.
+</ParamField>
+
+<ParamField body="rtsp" type="boolean">
+  Enable or disable the RTSP server.
+</ParamField>
+
+<ParamField body="rtmp" type="boolean">
+  Enable or disable the RTMP server.
+</ParamField>
+
+<ParamField body="hls" type="boolean">
+  Enable or disable the HLS server.
+</ParamField>
+
+<ParamField body="webrtc" type="boolean">
+  Enable or disable the WebRTC server.
+</ParamField>
+
+<ParamField body="srt" type="boolean">
+  Enable or disable the SRT server.
+</ParamField>
+
+**Response**
+
+```json
+{ "status": "ok" }
+```
+
+---
+
+## Default path configuration
+
+### GET /v3/config/pathdefaults/get
+
+Returns the default path configuration. All path configurations inherit from this unless overridden.
+
+```bash
+curl http://localhost:9997/v3/config/pathdefaults/get
+```
+
+**Response** — `PathConf` object. See [GET /v3/config/paths/get/{name}](#get-v3-config-paths-get-name) for the full field list.
+
+---
+
+### PATCH /v3/config/pathdefaults/patch
+
+Updates the default path configuration. All fields are optional.
+
+```bash
+curl -X PATCH http://localhost:9997/v3/config/pathdefaults/patch \
+  -H 'Content-Type: application/json' \
+  -d '{"record": true, "recordPath": "/recordings/%path/%Y-%m-%d_%H-%M-%S-%f"}'
+```
+
+**Response**
+
+```json
+{ "status": "ok" }
+```
+
+---
+
+## Path configurations
+
+### GET /v3/config/paths/list
+
+Returns a paginated list of all configured paths.
+
+```bash
+curl "http://localhost:9997/v3/config/paths/list?page=0&itemsPerPage=100"
+```
+
+**Query parameters**
+
+<ParamField query="page" type="integer" default="0">
+  Page number (zero-indexed).
+</ParamField>
+
+<ParamField query="itemsPerPage" type="integer" default="100">
+  Number of items per page.
+</ParamField>
+
+**Response**
+
+<ResponseField name="pageCount" type="integer">Total number of pages.</ResponseField>
+<ResponseField name="itemCount" type="integer">Total number of path configurations.</ResponseField>
+<ResponseField name="items" type="object[]">Array of `PathConf` objects.</ResponseField>
+
+---
+
+### GET /v3/config/paths/get/{name}
+
+Returns the configuration for a specific path.
+
+```bash
+curl http://localhost:9997/v3/config/paths/get/mystream
+```
+
+**Path parameters**
+
+<ParamField path="name" type="string" required>
+  The path name (e.g. `mystream`, `camera1`).
+</ParamField>
+
+**Response** — `PathConf` object:
+
+<ResponseField name="name" type="string">
+  The path name.
+</ResponseField>
+
+<ResponseField name="source" type="string">
+  Source URL for pull-mode paths (e.g. `rtsp://...`). Set to `publisher` for push-mode paths.
+</ResponseField>
+
+<ResponseField name="sourceOnDemand" type="boolean">
+  Whether the source is connected only when a reader is active.
+</ResponseField>
+
+<ResponseField name="sourceOnDemandStartTimeout" type="string">
+  Timeout for the source to connect when on-demand (e.g. `"10s"`).
+</ResponseField>
+
+<ResponseField name="sourceOnDemandCloseAfter" type="string">
+  Time before the source is disconnected after the last reader leaves.
+</ResponseField>
+
+<ResponseField name="maxReaders" type="integer">
+  Maximum number of simultaneous readers. `0` means unlimited.
+</ResponseField>
+
+<ResponseField name="record" type="boolean">
+  Whether recording is enabled for this path.
+</ResponseField>
+
+<ResponseField name="recordPath" type="string">
+  Path pattern for recorded files. Supports `%path`, `%Y`, `%m`, `%d`, `%H`, `%M`, `%S`, `%f`.
+</ResponseField>
+
+<ResponseField name="recordFormat" type="string">
+  Recording format. One of `fmp4`, `mpegts`.
+</ResponseField>
+
+<ResponseField name="recordSegmentDuration" type="string">
+  Duration of each recording segment (e.g. `"1h"`).
+</ResponseField>
+
+<ResponseField name="recordDeleteAfter" type="string">
+  Automatically delete recordings older than this duration (e.g. `"24h"`). Empty disables deletion.
+</ResponseField>
+
+<ResponseField name="overridePublisher" type="boolean">
+  Whether a new publisher can take over from an existing one.
+</ResponseField>
+
+<ResponseField name="rtspTransport" type="string">
+  RTSP transport for pull sources. One of `udp`, `multicast`, `tcp`, `automatic`.
+</ResponseField>
+
+<ResponseField name="runOnInit" type="string">
+  Command to run when the path is initialized.
+</ResponseField>
+
+<ResponseField name="runOnDemand" type="string">
+  Command to run when the first reader connects (on-demand publishing).
+</ResponseField>
+
+<ResponseField name="runOnReady" type="string">
+  Command to run when the path becomes ready (has a source).
+</ResponseField>
+
+<ResponseField name="runOnRead" type="string">
+  Command to run when a reader connects.
+</ResponseField>
+
+<ResponseField name="runOnRecordSegmentCreate" type="string">
+  Command to run when a new recording segment is created.
+</ResponseField>
+
+<ResponseField name="runOnRecordSegmentComplete" type="string">
+  Command to run when a recording segment is completed.
+</ResponseField>
+
+---
+
+### POST /v3/config/paths/add/{name}
+
+Adds a new path configuration. The path becomes available immediately.
+
+```bash
+curl -X POST http://localhost:9997/v3/config/paths/add/mystream \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "source": "rtsp://camera.local/live",
+    "sourceOnDemand": true,
+    "record": true,
+    "recordSegmentDuration": "1h"
+  }'
+```
+
+**Path parameters**
+
+<ParamField path="name" type="string" required>
+  The name of the new path.
+</ParamField>
+
+**Request body** — partial `PathConf`. All fields are optional.
+
+**Response**
+
+```json
+{ "status": "ok" }
+```
+
+---
+
+### PATCH /v3/config/paths/patch/{name}
+
+Updates specific fields of an existing path configuration. Fields not included in the request are unchanged.
+
+```bash
+curl -X PATCH http://localhost:9997/v3/config/paths/patch/mystream \
+  -H 'Content-Type: application/json' \
+  -d '{"record": false}'
+```
+
+**Path parameters**
+
+<ParamField path="name" type="string" required>
+  The name of the path to update.
+</ParamField>
+
+**Request body** — partial `PathConf`. All fields are optional.
+
+**Response**
+
+```json
+{ "status": "ok" }
+```
+
+---
+
+### POST /v3/config/paths/replace/{name}
+
+Replaces all values of an existing path configuration. This is equivalent to deleting and re-adding the path. Fields not included are reset to their defaults.
+
+```bash
+curl -X POST http://localhost:9997/v3/config/paths/replace/mystream \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "source": "rtsp://newcamera.local/stream",
+    "maxReaders": 10
+  }'
+```
+
+**Path parameters**
+
+<ParamField path="name" type="string" required>
+  The name of the path to replace.
+</ParamField>
+
+**Request body** — partial `PathConf`. All fields are optional.
+
+**Response**
+
+```json
+{ "status": "ok" }
+```
+
+---
+
+### DELETE /v3/config/paths/delete/{name}
+
+Removes a path configuration. Any active publishers and readers on that path are disconnected.
+
+```bash
+curl -X DELETE http://localhost:9997/v3/config/paths/delete/mystream
+```
+
+**Path parameters**
+
+<ParamField path="name" type="string" required>
+  The name of the path to delete.
+</ParamField>
+
+**Response**
+
+```json
+{ "status": "ok" }
+```
+
+<Warning>
+  Deleting a path configuration immediately disconnects all publishers and readers using that path. The path will no longer accept connections.
+</Warning>

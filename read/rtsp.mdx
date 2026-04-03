@@ -1,0 +1,146 @@
+---
+title: "Read via RTSP"
+description: "Read live streams from MediaMTX using the RTSP protocol. Compatible with FFmpeg, GStreamer, VLC, OBS Studio, and any standard RTSP client."
+---
+
+RTSP (Real-Time Streaming Protocol) is a widely supported protocol for reading live streams. MediaMTX supports multiple transport variants and optional encryption (RTSPS).
+
+## Read a stream
+
+Use the following URL to read a stream via RTSP:
+
+```
+rtsp://localhost:8554/mystream
+```
+
+Replace `mystream` with the path name of the stream.
+
+<Note>
+  The default RTSP port is `8554`. The encrypted RTSPS port is `8322`. Both are configurable in `mediamtx.yml`.
+</Note>
+
+## Transport protocols
+
+RTSP supports multiple underlying transport protocols for the data stream. The default in most clients is UDP.
+
+| Transport | Description |
+|-----------|-------------|
+| UDP | Most performant. Requires two extra UDP ports to be reachable. |
+| UDP-multicast | Efficient for multiple clients on the same LAN. |
+| TCP | Most reliable. Works through NATs and firewalls. |
+
+### FFmpeg transport selection
+
+```bash
+ffmpeg -rtsp_transport tcp -i rtsp://localhost:8554/mystream -c copy output.mp4
+```
+
+Available options:
+- `-rtsp_transport tcp`
+- `-rtsp_transport udp`
+- `-rtsp_transport udp_multicast`
+
+### GStreamer transport selection
+
+```bash
+gst-launch-1.0 rtspsrc location=rtsp://127.0.0.1:8554/mystream protocols=tcp latency=0 ! decodebin ! autovideosink
+```
+
+Available options:
+- `protocols=tcp`
+- `protocols=udp`
+- `protocols=udp-mcast`
+
+### VLC transport selection
+
+Force TCP transport with the `--rtsp-tcp` flag:
+
+```bash
+vlc --network-caching=50 --rtsp-tcp rtsp://localhost:8554/mystream
+```
+
+Use UDP-multicast by appending `?vlcmulticast` to the URL:
+
+```bash
+vlc --network-caching=50 rtsp://localhost:8554/mystream?vlcmulticast
+```
+
+## Encryption (RTSPS)
+
+RTSP streams can be encrypted using RTSPS (RTSP over TLS). First, generate a TLS certificate:
+
+```bash
+openssl genrsa -out server.key 2048
+openssl req -new -x509 -sha256 -key server.key -out server.crt -days 3650
+```
+
+Then configure `mediamtx.yml`:
+
+```yaml
+rtspEncryption: optional
+rtspServerKey: server.key
+rtspServerCert: server.crt
+```
+
+Read using the `rtsps` scheme on port `8322`:
+
+```
+rtsps://localhost:8322/mystream
+```
+
+When reading with GStreamer over RTSPS, set `tls-validation-flags` to `0`:
+
+```bash
+gst-launch-1.0 rtspsrc tls-validation-flags=0 location=rtsps://localhost:8322/mystream latency=0 ! decodebin ! autovideosink
+```
+
+<Warning>
+  VLC does not support reading encrypted RTSP streams. Use a local MediaMTX instance or a proxy like stunnel or nginx to decrypt before reading.
+</Warning>
+
+## Read with FFmpeg
+
+```bash
+ffmpeg -i rtsp://localhost:8554/mystream -c copy output.mp4
+```
+
+## Read with GStreamer
+
+```bash
+gst-launch-1.0 rtspsrc location=rtsp://127.0.0.1:8554/mystream latency=0 ! decodebin ! autovideosink
+```
+
+## Read with VLC
+
+```bash
+vlc --network-caching=50 rtsp://localhost:8554/mystream
+```
+
+<Note>
+  The VLC package shipped with Ubuntu 21.10 and later does not support RTSP due to a licensing issue. If RTSP playback fails, remove the system package and install the snap version:
+
+  ```bash
+  sudo apt purge -y vlc
+  snap install vlc
+  ```
+</Note>
+
+## Read with OBS Studio
+
+In OBS Studio, add a **Media Source**:
+
+<Steps>
+  <Step title="Add a Media Source">
+    In the **Sources** panel, click **+** and select **Media Source**, then click **OK**.
+  </Step>
+  <Step title="Configure the source">
+    Uncheck **Local file**, then enter the RTSP URL in the **Input** field:
+
+    ```
+    rtsp://localhost:8554/mystream
+    ```
+  </Step>
+  <Step title="Confirm">
+    Click **OK** to start reading the stream.
+  </Step>
+</Steps>

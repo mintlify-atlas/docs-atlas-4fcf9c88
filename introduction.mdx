@@ -1,0 +1,52 @@
+---
+title: "Introduction"
+description: "MediaMTX is a ready-to-use, zero-dependency live media server and media proxy that routes streams from one end to the other."
+---
+
+MediaMTX is a ready-to-use and zero-dependency live media server and media proxy. It has been conceived as a "media router" that routes media streams from one end to the other, with a focus on efficiency and portability.
+
+## Supported protocols
+
+Publish and read live streams using any combination of these protocols — MediaMTX automatically converts between them:
+
+| Protocol | Publish | Read |
+|---|---|---|
+| SRT | ✓ | ✓ |
+| WebRTC (WHIP/WHEP) | ✓ | ✓ |
+| RTSP / RTSPS | ✓ | ✓ |
+| RTMP / RTMPS | ✓ | ✓ |
+| HLS (LL-HLS, fMP4, MPEG-TS) | ✓ | ✓ |
+| MPEG-TS (UDP/Unix socket) | ✓ | — |
+| RTP (UDP) | ✓ | — |
+
+## Key features
+
+- **Multi-protocol support** — publish and read streams over SRT, WebRTC, RTSP, RTMP, HLS, MPEG-TS, and RTP using FFmpeg, GStreamer, OBS Studio, VLC, web browsers, Raspberry Pi Cameras, and more
+- **Automatic protocol conversion** — streams are converted from one protocol to another on the fly, with no re-encoding
+- **Multiple simultaneous streams** — serve many streams at once in separate, isolated paths
+- **Hot reloading** — reload configuration without disconnecting existing clients
+- **Recording** — record streams to disk in fMP4 or MPEG-TS format
+- **Playback** — play back recorded streams through the built-in playback server
+- **Authentication** — protect streams with internal credentials, HTTP callbacks, or JWTs from any identity provider
+- **Hooks** — run external commands when clients connect, disconnect, publish, or read
+- **Forwarding & proxying** — forward streams to other servers or proxy requests from external sources
+- **Control API** — manage paths, sessions, and configuration at runtime through a REST API
+- **Prometheus metrics** — export server metrics in a Prometheus-compatible format
+- **Single binary, zero dependencies** — runs on Linux, Windows, and macOS without any runtime or interpreter
+
+## Explore the documentation
+
+<CardGroup cols={2}>
+  <Card title="Publishing streams" icon="broadcast-tower" href="/publish/overview">
+    Publish live streams from FFmpeg, GStreamer, OBS Studio, web browsers, Raspberry Pi Cameras, and more.
+  </Card>
+  <Card title="Reading streams" icon="eye" href="/read/overview">
+    Read live streams with FFmpeg, VLC, GStreamer, OBS Studio, web browsers, and any protocol-compatible client.
+  </Card>
+  <Card title="Configuration" icon="sliders" href="/features/configuration">
+    Configure paths, authentication, recording, proxying, and all other server settings.
+  </Card>
+  <Card title="Control API" icon="code" href="/operations/control-api">
+    Manage and inspect the server at runtime through the REST-based Control API.
+  </Card>
+</CardGroup>

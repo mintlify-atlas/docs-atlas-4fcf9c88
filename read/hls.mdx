@@ -1,0 +1,79 @@
+---
+title: "Read via HLS"
+description: "Read live streams from MediaMTX using HLS. Supports Low-Latency HLS, fMP4 segments, and MPEG-TS segments. Streams are generated on demand when the first reader connects."
+---
+
+HLS (HTTP Live Streaming) works by splitting a stream into segments and serving them over HTTP alongside a playlist file. MediaMTX generates HLS segments on demand — the HLS output for a path is created when the first HLS reader connects.
+
+## Read in a browser
+
+Open the following URL in a browser to play a stream via the built-in HLS player:
+
+```
+http://localhost:8888/mystream
+```
+
+## Read with HLS-compatible software
+
+To read with a player that supports HLS directly (such as VLC or FFmpeg), use the playlist URL:
+
+```
+http://localhost:8888/mystream/index.m3u8
+```
+
+<Note>
+  The default HLS port is `8888`. This is configured via `hlsAddress` in `mediamtx.yml`.
+</Note>
+
+## HLS variants
+
+MediaMTX supports three HLS variants, configured via `hlsVariant` in `mediamtx.yml`:
+
+| Variant | Description | Default |
+|---------|-------------|---------|
+| `lowLatency` | Low-Latency HLS (LL-HLS) — uses partial segments for sub-second latency | Yes |
+| `fmp4` | Fragmented MP4 segments — more efficient than MPEG-TS | No |
+| `mpegts` | MPEG-TS segments — maximum compatibility with older players | No |
+
+```yaml
+# mediamtx.yml
+hlsVariant: lowLatency
+```
+
+<Tip>
+  Low-Latency HLS provides the best latency for browser-based playback. Use `mpegts` if you need compatibility with older HLS clients.
+</Tip>
+
+## On-demand generation
+
+HLS output is not generated continuously. MediaMTX starts producing HLS segments only when at least one HLS reader connects. This saves CPU and memory for paths that are not actively being read via HLS.
+
+## Read with VLC
+
+```bash
+vlc http://localhost:8888/mystream/index.m3u8
+```
+
+## Read with FFmpeg
+
+```bash
+ffmpeg -i http://localhost:8888/mystream/index.m3u8 -c copy output.mp4
+```
+
+## Embed in a website
+
+Web browsers can access HLS streams directly via the built-in player page, or you can embed the stream in your own website using an HLS JavaScript player such as hls.js.
+
+HLS has higher latency than WebRTC but has several advantages:
+- No connectivity issues — it uses standard HTTP
+- Compatible with CDNs (Cloudflare, CloudFront) for unlimited scale
+- Supported by virtually all browsers and devices
+
+For embedding in a website, a WebRTC stream at `http://localhost:8889/mystream` provides lower latency, while HLS at `http://localhost:8888/mystream` handles more concurrent readers via CDN.
+
+## Supported codecs
+
+| Type | Codecs |
+|------|--------|
+| Video | AV1, VP9, H265, H264 |
+| Audio | Opus, AAC |

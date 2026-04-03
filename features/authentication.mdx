@@ -1,0 +1,395 @@
+---
+title: "Authentication"
+description: "Protect streams and the API with credentials using internal, HTTP, or JWT authentication."
+keywords: ["authentication", "credentials", "JWT", "HTTP auth", "internal users", "RTSP auth", "RTMP auth"]
+---
+
+MediaMTX can require clients to provide credentials before publishing, reading, or accessing the API. Credentials are validated through one of three methods: an internal user database, an external HTTP server, or a JWT identity provider.
+
+Set `authMethod` to choose the validation method:
+
+```yaml
+# Available values: internal, http, jwt
+authMethod: internal
+```
+
+<Tabs>
+  <Tab title="Internal">
+
+## Internal authentication
+
+Users are stored directly in `mediamtx.yml`. This is the default method.
+
+```yaml
+authMethod: internal
+
+authInternalUsers:
+  - user: alice
+    pass: secret123
+    ips: []
+    permissions:
+      - action: publish
+        path: live
+      - action: read
+        path:
+
+  - user: bob
+    pass: readonlypass
+    ips: []
+    permissions:
+      - action: read
+        path:
+      - action: playback
+        path:
+```
+
+Each user entry has the following fields:
+
+| Field | Description |
+|---|---|
+| `user` | Username. Use `any` to match any user, including anonymous clients |
+| `pass` | Password. Not used when `user` is `any` |
+| `ips` | Allowed IP addresses or CIDR ranges. Empty list means any IP |
+| `permissions` | List of allowed actions and optional path restrictions |
+
+Available actions: `publish`, `read`, `playback`, `api`, `metrics`, `pprof`.
+
+Leave `path` empty to allow access to all paths. Set a path string to restrict access to that specific path. Use a `~` prefix for regular expressions:
+
+```yaml
+permissions:
+  - action: publish
+    path: "~^live/.+"
+  - action: read
+    path:
+```
+
+### Default configuration
+
+The default configuration allows any anonymous user to publish and read any path, and grants localhost access to `api`, `metrics`, and `pprof`:
+
+```yaml
+authInternalUsers:
+  - user: any
+    pass:
+    ips: []
+    permissions:
+      - action: publish
+        path:
+      - action: read
+        path:
+      - action: playback
+        path:
+
+  - user: any
+    pass:
+    ips: ['127.0.0.1', '::1']
+    permissions:
+      - action: api
+      - action: metrics
+      - action: pprof
+```
+
+### Hashed passwords
+
+Avoid storing plain-text passwords by hashing them first. MediaMTX supports Argon2 and SHA256.
+
+**Argon2** (recommended):
+
+```bash
+echo -n "mypass" | argon2 saltItWithSalt -id -l 32 -e
+```
+
+Store with the `argon2:` prefix:
+
+```yaml
+authInternalUsers:
+  - user: argon2:$argon2id$v=19$m=4096,t=3,p=1$MTIzNDU2Nzg$OGGO0eCMN0ievb4YGSzvS/H+Vajx1pcbUmtLp2tRqRU
+    pass: argon2:$argon2i$v=19$m=4096,t=3,p=1$MTIzNDU2Nzg$oct3kOiFywTdDdt19kT07hdvmsPTvt9zxAUho2DLqZw
+    permissions:
+      - action: publish
+```
+
+**SHA256**:
+
+```bash
+echo -n "mypass" | openssl dgst -binary -sha256 | openssl base64
+```
+
+Store with the `sha256:` prefix:
+
+```yaml
+authInternalUsers:
+  - user: sha256:j1tsRqDEw9xvq/D7/9tMx6Jh/jMhk3UfjwIB2f1zgMo=
+    pass: sha256:BdSWkrdV+ZxFBLUQQY7+7uv9RmiSVA8nrPmjGjJtZQQ=
+    permissions:
+      - action: publish
+```
+
+<Warning>
+  Enable TLS encryption or use a VPN to prevent credentials from being intercepted in transit.
+</Warning>
+
+  </Tab>
+  <Tab title="HTTP">
+
+## HTTP authentication
+
+Delegate authentication to an external HTTP server. Every time a client needs to be authenticated, MediaMTX calls your server with a POST request.
+
+```yaml
+authMethod: http
+authHTTPAddress: http://myauthserver/auth
+```
+
+### Request format
+
+MediaMTX sends a JSON body to your endpoint:
+
+```json
+{
+  "user": "user",
+  "password": "password",
+  "token": "token",
+  "ip": "ip",
+  "action": "publish|read|playback|api|metrics|pprof",
+  "path": "path",
+  "protocol": "rtsp|rtmp|hls|webrtc|srt",
+  "id": "id",
+  "query": "query"
+}
+```
+
+Your server must respond with a `20x` status code to allow access, or any other status to deny it.
+
+<Note>
+  It is normal for your server to receive requests with empty `user` and `password` fields. RTSP clients do not send credentials until asked. Reply with `401` to trigger the credential prompt; the client will retry with credentials.
+</Note>
+
+### Excluding actions
+
+Some actions can bypass HTTP authentication:
+
+```yaml
+authHTTPExclude:
+  - action: api
+  - action: metrics
+  - action: pprof
+```
+
+### Self-signed TLS certificates
+
+If your authentication server uses a self-signed certificate, provide its fingerprint to validate it:
+
+```yaml
+authMethod: http
+authHTTPAddress: https://myauthserver/auth
+authHTTPFingerprint: 33949e05fffb5ff3e8aa16f8213a6251b4d9363804ba53233c4da9a46d6f2739
+```
+
+Obtain the fingerprint with:
+
+```bash
+openssl s_client -connect myauthserver:443 </dev/null 2>/dev/null \
+  | sed -n '/BEGIN/,/END/p' > server.crt
+openssl x509 -in server.crt -noout -fingerprint -sha256 \
+  | cut -d "=" -f2 | tr -d ':'
+```
+
+  </Tab>
+  <Tab title="JWT">
+
+## JWT authentication
+
+Delegate authentication to an identity server that issues signed JWTs. MediaMTX fetches the public key from a JWKS endpoint once and uses it to validate all subsequent tokens locally, without contacting the identity server for each request.
+
+```yaml
+authMethod: jwt
+authJWTJWKS: http://my_identity_server/jwks_endpoint
+authJWTClaimKey: mediamtx_permissions
+```
+
+### JWT claim format
+
+The JWT must contain a claim (named by `authJWTClaimKey`) with a list of permissions:
+
+```json
+{
+  "mediamtx_permissions": [
+    {
+      "action": "publish",
+      "path": ""
+    },
+    {
+      "action": "read",
+      "path": "live"
+    }
+  ]
+}
+```
+
+### Issuer and audience validation
+
+Optionally validate the `iss` and `aud` claims:
+
+```yaml
+authMethod: jwt
+authJWTJWKS: http://my_identity_server/jwks_endpoint
+authJWTClaimKey: mediamtx_permissions
+authJWTIssuer: http://my_identity_server
+authJWTAudience: mediamtx
+```
+
+Leave either field empty to skip that validation.
+
+### Self-signed TLS certificates
+
+```yaml
+authMethod: jwt
+authJWTJWKS: https://my_identity_server/jwks_endpoint
+authJWTJWKSFingerprint: 33949e05fffb5ff3e8aa16f8213a6251b4d9363804ba53233c4da9a46d6f2739
+authJWTClaimKey: mediamtx_permissions
+```
+
+### Example: Keycloak setup
+
+<Steps>
+  <Step title="Start Keycloak">
+    ```bash
+    docker run --name=keycloak -p 8080:8080 \
+      -e KEYCLOAK_ADMIN=admin -e KEYCLOAK_ADMIN_PASSWORD=admin \
+      quay.io/keycloak/keycloak:23.0.7 start-dev
+    ```
+  </Step>
+  <Step title="Create realm and client scope">
+    Open the Keycloak web UI at `http://localhost:8080`, log in, and:
+    1. Click **master → Create realm**, set name to `mediamtx`, click **Create**.
+    2. Open **Client scopes → Create client scope**, set name to `mediamtx`, **Save**.
+    3. Open tab **Mappers → Configure a new Mapper → User Attribute** and set:
+       - Name: `mediamtx_permissions`
+       - User Attribute: `mediamtx_permissions`
+       - Token Claim Name: `mediamtx_permissions`
+       - Claim JSON Type: `JSON`
+       - Multivalued: `On`
+  </Step>
+  <Step title="Create a client">
+    Open **Clients → Create client**, set Client ID to `mediamtx`, enable **Client authentication**, **Save**.
+    - In tab **Credentials**, copy the client secret.
+    - In tab **Client scopes**, set all existing scopes to **Optional** to keep JWTs short.
+    - Add the `mediamtx` scope: **Add client scope → mediamtx → Default**.
+  </Step>
+  <Step title="Create a user with permissions">
+    Open **Users → Add user**, set Username to `testuser`, **Create**.
+    - In tab **Credentials**, set a password.
+    - In tab **Attributes → Add an attribute**: Key `mediamtx_permissions`, Value `{"action":"publish","path":""}`.
+  </Step>
+  <Step title="Configure MediaMTX">
+    ```yaml
+    authMethod: jwt
+    authJWTJWKS: http://localhost:8080/realms/mediamtx/protocol/openid-connect/certs
+    authJWTClaimKey: mediamtx_permissions
+    ```
+  </Step>
+  <Step title="Authenticate and use the token">
+    Obtain a JWT from Keycloak:
+    ```bash
+    curl \
+      -d "client_id=mediamtx" \
+      -d "client_secret=$CLIENT_SECRET" \
+      -d "username=$USER" \
+      -d "password=$PASS" \
+      -d "grant_type=password" \
+      http://localhost:8080/realms/mediamtx/protocol/openid-connect/token
+    ```
+    Use the `access_token` value from the response as your JWT in stream URLs or the `Authorization: Bearer` header.
+  </Step>
+</Steps>
+
+  </Tab>
+</Tabs>
+
+---
+
+## Providing credentials per protocol
+
+### RTSP — username and password
+
+Prepend credentials to the host:
+
+```
+rtsp://myuser:mypass@localhost:8554/mystream
+```
+
+### RTSP — JWT token
+
+Pass the token as a query parameter:
+
+```
+rtsp://localhost:8554/mystream?jwt=<token>
+```
+
+<Warning>
+  FFmpeg's RTSP implementation limits URLs to 4096 characters. Keep JWTs short enough to stay under this limit.
+</Warning>
+
+### RTMP — username and password
+
+Use `user` and `pass` query parameters:
+
+```
+rtmp://localhost/mystream?user=myuser&pass=mypass
+```
+
+### RTMP — JWT token
+
+```
+rtmp://localhost/mystream?jwt=<token>
+```
+
+<Warning>
+  FFmpeg's RTMP implementation limits URLs to 1024 characters.
+</Warning>
+
+### SRT — username and password
+
+Append credentials to the `streamid`:
+
+```
+srt://localhost:8890?streamid=publish:mystream:myuser:mypass&pkt_size=1316
+```
+
+### SRT — JWT token
+
+Pass the token as the password field in `streamid`:
+
+```
+srt://localhost:8890?streamid=publish:mystream:user:<token>&pkt_size=1316
+```
+
+<Warning>
+  SRT stream IDs are limited to 512 characters.
+</Warning>
+
+### HLS and WebRTC — username and password
+
+Pass credentials via the `Authorization: Basic` header:
+
+```
+Authorization: Basic base64(user:pass)
+```
+
+If `Authorization: Basic` is unavailable (for example in OBS Studio), use `Authorization: Bearer` with `username:password` as the value:
+
+```
+Authorization: Bearer username:password
+```
+
+### HLS and WebRTC — JWT token
+
+Pass the JWT via the `Authorization: Bearer` header:
+
+```
+Authorization: Bearer <token>
+```
+
+In OBS Studio, enter the token in the **Bearer Token** field.

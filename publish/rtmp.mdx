@@ -1,0 +1,156 @@
+---
+title: "Publish via RTMP"
+description: "Publish live streams to MediaMTX using RTMP from OBS Studio, FFmpeg, cameras, and remote servers."
+---
+
+RTMP (Real-Time Messaging Protocol) is widely supported by streaming software and some IP cameras. MediaMTX supports RTMP, RTMPS (RTMP over TLS), and Enhanced RTMP (which adds support for newer codecs such as AV1, VP9, and H265).
+
+**Supported codecs**
+
+| Type | Codecs |
+|---|---|
+| Video | AV1, VP9, H265, H264 |
+| Audio | Opus, MPEG-4 Audio (AAC), MPEG-1/2 Audio (MP3), AC-3, G711 (PCMA, PCMU), LPCM |
+
+## RTMP clients
+
+A client connects to MediaMTX and pushes the stream. The server listens on port `1935` by default. Publish to:
+
+```
+rtmp://localhost/mystream
+```
+
+The stream becomes available at `/mystream`.
+
+### Publish with FFmpeg
+
+```bash
+ffmpeg -re -stream_loop -1 -i file.mp4 -c copy -f flv rtmp://localhost/mystream
+```
+
+### Publish with GStreamer
+
+```bash
+gst-launch-1.0 -v flvmux name=mux ! rtmpsink location=rtmp://localhost/stream \
+videotestsrc ! video/x-raw,width=1280,height=720,format=I420 ! x264enc speed-preset=ultrafast bitrate=3000 key-int-max=60 ! video/x-h264,profile=high ! mux. \
+audiotestsrc ! audioconvert ! avenc_aac ! mux.
+```
+
+### Publish with OBS Studio
+
+In **Settings → Stream** (or in the Auto-configuration Wizard), set:
+
+- **Service**: `Custom...`
+- **Server**: `rtmp://localhost/mystream`
+- **Stream key**: (leave empty)
+
+Click **Start streaming**.
+
+If you need a stream compatible with WebRTC output, use **Settings → Output → Recording** instead:
+
+- **FFmpeg output type**: `Output to URL`
+- **File path or URL**: `rtsp://localhost:8554/mystream`
+- **Container format**: `rtsp`
+- Check **Show all codecs (even if potentially incompatible)**
+- **Video encoder**: `h264_nvenc` or `libx264`
+- **Video encoder settings**: `bf=0`
+- **Audio track**: `1`
+- **Audio encoder**: `libopus`
+
+Then click **Start Recording** (not Start Streaming) to begin.
+
+### Multitrack video with OBS Studio
+
+OBS Studio v31.0.0 and later can publish multiple video renditions simultaneously (simulcast). In **Settings → Stream**:
+
+- **Service**: `Custom...`
+- **Server**: `rtmp://localhost/mystream`
+- **Stream key**: (leave empty)
+- Enable **Enable Multitrack Video**
+- Leave **Maximum Streaming Bandwidth** and **Maximum Video Tracks** set to `Auto`
+- Enable **Enable Config Override**
+- Set **Config Override (JSON)** to:
+
+```json
+{
+  "encoder_configurations": [
+    {
+      "type": "obs_x264",
+      "width": 1920,
+      "height": 1080,
+      "framerate": { "numerator": 30, "denominator": 1 },
+      "settings": {
+        "rate_control": "CBR",
+        "bitrate": 6000,
+        "keyint_sec": 2,
+        "preset": "veryfast",
+        "profile": "high",
+        "tune": "zerolatency"
+      },
+      "canvas_index": 0
+    },
+    {
+      "type": "obs_x264",
+      "width": 640,
+      "height": 480,
+      "framerate": { "numerator": 30, "denominator": 1 },
+      "settings": {
+        "rate_control": "CBR",
+        "bitrate": 3000,
+        "keyint_sec": 2,
+        "preset": "veryfast",
+        "profile": "main",
+        "tune": "zerolatency"
+      },
+      "canvas_index": 0
+    }
+  ],
+  "audio_configurations": {
+    "live": [
+      {
+        "codec": "ffmpeg_aac",
+        "track_id": 1,
+        "channels": 2,
+        "settings": { "bitrate": 160 }
+      }
+    ]
+  }
+}
+```
+
+Available encoder type values for the `type` field:
+
+| Value | Encoder |
+|---|---|
+| `obs_nvenc_av1_tex` | NVIDIA NVENC AV1 |
+| `obs_nvenc_hevc_tex` | NVIDIA NVENC H265 |
+| `obs_nvenc_h264_tex` | NVIDIA NVENC H264 |
+| `av1_texture_amf` | AMD AV1 |
+| `h265_texture_amf` | AMD H265 |
+| `h264_texture_amf` | AMD H264 |
+| `obs_qsv11_av1` | QuickSync AV1 |
+| `obs_qsv11_v2` | QuickSync H264 |
+| `obs_x264` | Software H264 |
+
+## RTMPS
+
+RTMPS is RTMP over TLS. To publish with RTMPS, use the `rtmps://` scheme:
+
+```
+rtmps://localhost/mystream
+```
+
+The server must be configured with a TLS certificate. See the RTMP-specific features documentation for setup instructions.
+
+## RTMP cameras and servers
+
+MediaMTX can connect to an existing RTMP source and pull the stream:
+
+```yaml
+paths:
+  proxied:
+    # URL of the source stream, in the format rtmp://user:pass@host:port/path
+    source: rtmp://original-url
+```
+
+The ingested stream is available at `/proxied`. Use `rtmps://` for encrypted sources.

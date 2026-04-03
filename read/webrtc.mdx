@@ -1,0 +1,94 @@
+---
+title: "Read via WebRTC"
+description: "Read live streams from MediaMTX using WebRTC. Supports browser-based playback and WHEP clients for programmatic access."
+---
+
+WebRTC is an API that uses a set of protocols to connect clients and exchange live media with minimal latency. MediaMTX exposes streams over WebRTC in two ways: via a built-in web player, and via the WHEP protocol for programmatic clients.
+
+## Read in a browser
+
+Open the following URL in any modern browser to play a stream:
+
+```
+http://localhost:8889/mystream
+```
+
+Replace `mystream` with the path name of the stream.
+
+<Note>
+  Not all browsers support all codecs over WebRTC. In particular, H265 is only supported on Windows in Chrome when a capable GPU is present. See the codec notes below.
+</Note>
+
+## Read via WHEP
+
+WHEP (WebRTC-HTTP Egress Protocol) is a standardized extension that allows reading WebRTC streams using a simple HTTP URL, without a web page. Any WHEP-compatible client can read a stream at:
+
+```
+http://localhost:8889/mystream/whep
+```
+
+Clients that support WHEP include FFmpeg (recent builds), GStreamer, and Unity.
+
+## Default port
+
+The WebRTC server listens on port `8889` by default. This is configured via `webrtcAddress` in `mediamtx.yml`.
+
+## Codec compatibility
+
+WebRTC codec support varies across browsers:
+
+- **H265** — only supported in Chrome on Windows with a compatible GPU. Most browsers do not support it.
+- **H264 with B-frames** — not supported in any browser. B-frames are excluded from the WebRTC specification.
+- **AV1, VP9, VP8** — broadly supported.
+- **Opus** — universally supported for audio.
+- **G711 (PCMA/PCMU), G722** — supported by most browsers.
+
+To maximize compatibility, re-encode to H264 baseline profile and Opus audio:
+
+```bash
+ffmpeg -i rtsp://original-source \
+  -c:v libx264 -pix_fmt yuv420p -preset ultrafast -b:v 600k \
+  -c:a libopus -b:a 64K -async 50 \
+  -f rtsp rtsp://localhost:8554/mystream
+```
+
+## Connectivity
+
+WebRTC media flows over a peer connection established after an HTTP handshake. If clients cannot connect, the most common causes are NAT or firewall blocking.
+
+**Add your server's reachable IPs** to `webrtcAdditionalHosts` so clients know how to reach the server:
+
+```yaml
+webrtcAdditionalHosts: [192.168.1.10, 1.2.3.4]
+```
+
+**If UDP is blocked**, enable the TCP fallback port:
+
+```yaml
+webrtcLocalTCPAddress: :8189
+```
+
+**If NAT traversal is needed**, add a STUN server:
+
+```yaml
+webrtcICEServers2:
+  - url: stun:stun.l.google.com:19302
+```
+
+**If all else fails**, use a TURN relay server:
+
+```yaml
+webrtcICEServers2:
+  - url: turn:host:port
+    username: user
+    password: password
+```
+
+## Clients that support WebRTC / WHEP
+
+- **Web browsers** — use the built-in player at `http://localhost:8889/mystream`
+- **FFmpeg** — read via WHEP (recent builds with WHEP support)
+- **GStreamer** — use the `whepsrc` element
+- **Unity** — use the `com.unity.webrtc` package
+
+See [Reading with popular tools](/read/tools) for specific commands.

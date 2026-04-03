@@ -1,0 +1,168 @@
+---
+title: "Control API overview"
+description: "Use the MediaMTX REST API to query server status, manage configuration, inspect active paths, and kick connections at runtime."
+---
+
+MediaMTX exposes a REST API at `http://localhost:9997` by default. You can use it to read and modify server configuration, list active paths and their sources, inspect connections for every protocol, and forcefully disconnect clients — all without restarting the server.
+
+## Enabling the API
+
+The API is disabled by default. Enable it by setting `api: true` in `mediamtx.yml`:
+
+```yaml
+api: true
+apiAddress: :9997
+```
+
+<Note>
+  By default the API is accessible only from localhost (`127.0.0.1` and `::1`). Unauthenticated access from remote IPs requires explicitly configuring authentication.
+</Note>
+
+## Authentication
+
+By default, requests from `127.0.0.1` and `::1` (localhost) are allowed without credentials, while remote clients are blocked. To require credentials from all callers (including localhost), configure `authInternalUsers` with an entry that includes `action: api`:
+
+```yaml
+authMethod: internal
+authInternalUsers:
+  - user: admin
+    pass: secret
+    permissions:
+      - action: api
+```
+
+Any request to the API will then require HTTP Basic Authentication with those credentials.
+
+## Base URL and versioning
+
+All endpoints are served under the `/v3/` prefix:
+
+```
+http://localhost:9997/v3/
+```
+
+## Response format
+
+All responses are JSON. Successful responses include a `status` field set to `"ok"`. Error responses include `status: "error"` and an `error` field with a human-readable message:
+
+```json
+{ "status": "ok" }
+```
+
+```json
+{ "status": "error", "error": "path not found" }
+```
+
+## Server info endpoint
+
+Retrieve basic server information — version and start time:
+
+```bash
+curl http://localhost:9997/v3/info
+```
+
+```json
+{
+  "version": "1.9.0",
+  "started": "2024-11-01T12:00:00Z"
+}
+```
+
+## Available endpoint groups
+
+<CardGroup cols={2}>
+  <Card title="Configuration" icon="sliders" href="/api/configuration">
+    Read and modify global server configuration and per-path configuration at runtime. Changes take effect immediately without a restart.
+  </Card>
+  <Card title="Paths" icon="route" href="/api/paths">
+    List all active stream paths and inspect their sources, tracks, readers, and traffic counters.
+  </Card>
+  <Card title="Sessions" icon="plug" href="/api/sessions">
+    List and kick active connections and sessions for every protocol: RTSP, RTMP, WebRTC, SRT, HLS, and recordings.
+  </Card>
+</CardGroup>
+
+### Endpoint reference
+
+| Prefix | Description |
+|--------|-------------|
+| `GET /v3/info` | Server version and uptime |
+| `GET /v3/config/global/get` | Read global configuration |
+| `PATCH /v3/config/global/patch` | Update global configuration |
+| `GET /v3/config/pathdefaults/get` | Read default path configuration |
+| `PATCH /v3/config/pathdefaults/patch` | Update default path configuration |
+| `GET /v3/config/paths/list` | List all path configurations |
+| `GET /v3/config/paths/get/{name}` | Get a specific path configuration |
+| `POST /v3/config/paths/add/{name}` | Add a new path configuration |
+| `PATCH /v3/config/paths/patch/{name}` | Update a path configuration |
+| `POST /v3/config/paths/replace/{name}` | Replace a path configuration |
+| `DELETE /v3/config/paths/delete/{name}` | Delete a path configuration |
+| `GET /v3/paths/list` | List active paths |
+| `GET /v3/paths/get/{name}` | Get a specific active path |
+| `GET /v3/rtspconns/list` | List RTSP connections |
+| `GET /v3/rtspconns/get/{id}` | Get an RTSP connection |
+| `GET /v3/rtspsessions/list` | List RTSP sessions |
+| `GET /v3/rtspsessions/get/{id}` | Get an RTSP session |
+| `POST /v3/rtspsessions/kick/{id}` | Kick an RTSP session |
+| `GET /v3/rtspsconns/list` | List RTSPS connections |
+| `GET /v3/rtspsconns/get/{id}` | Get an RTSPS connection |
+| `GET /v3/rtspssessions/list` | List RTSPS sessions |
+| `GET /v3/rtspssessions/get/{id}` | Get an RTSPS session |
+| `POST /v3/rtspssessions/kick/{id}` | Kick an RTSPS session |
+| `GET /v3/rtmpconns/list` | List RTMP connections |
+| `GET /v3/rtmpconns/get/{id}` | Get an RTMP connection |
+| `POST /v3/rtmpconns/kick/{id}` | Kick an RTMP connection |
+| `GET /v3/rtmpsconns/list` | List RTMPS connections |
+| `GET /v3/rtmpsconns/get/{id}` | Get an RTMPS connection |
+| `POST /v3/rtmpsconns/kick/{id}` | Kick an RTMPS connection |
+| `GET /v3/webrtcsessions/list` | List WebRTC sessions |
+| `GET /v3/webrtcsessions/get/{id}` | Get a WebRTC session |
+| `POST /v3/webrtcsessions/kick/{id}` | Kick a WebRTC session |
+| `GET /v3/srtconns/list` | List SRT connections |
+| `GET /v3/srtconns/get/{id}` | Get an SRT connection |
+| `POST /v3/srtconns/kick/{id}` | Kick an SRT connection |
+| `GET /v3/hlsmuxers/list` | List HLS muxers |
+| `GET /v3/hlsmuxers/get/{name}` | Get an HLS muxer |
+| `GET /v3/recordings/list` | List all recordings |
+| `GET /v3/recordings/get/{name}` | Get recordings for a path |
+| `DELETE /v3/recordings/deletesegment` | Delete a recording segment |
+
+## TLS / HTTPS
+
+To serve the API over HTTPS, enable `apiEncryption` and provide a key and certificate:
+
+```yaml
+api: true
+apiAddress: :9997
+apiEncryption: true
+apiServerKey: server.key
+apiServerCert: server.crt
+```
+
+## CORS
+
+To allow browser-based clients on other origins to call the API, configure `apiAllowOrigins`:
+
+```yaml
+apiAllowOrigins:
+  - https://my-dashboard.example.com
+```
+
+## Pagination
+
+List endpoints support pagination via query parameters:
+
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `page` | `0` | Page number (zero-indexed) |
+| `itemsPerPage` | `100` | Items per page |
+
+List responses include `pageCount`, `itemCount`, and `items`:
+
+```json
+{
+  "pageCount": 3,
+  "itemCount": 250,
+  "items": [...]
+}
+```

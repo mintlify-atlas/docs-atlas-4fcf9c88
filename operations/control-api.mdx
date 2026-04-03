@@ -1,0 +1,325 @@
+---
+title: "Control API"
+description: "Query and control a running MediaMTX instance at runtime using its HTTP Control API."
+keywords: ["control api", "rest api", "runtime configuration", "mediamtx api"]
+---
+
+The Control API lets you inspect server state, update configuration at runtime, and forcibly terminate active sessions — all over HTTP without restarting the process.
+
+## Enabling the API
+
+Add `api: true` to your `mediamtx.yml`:
+
+```yaml mediamtx.yml
+# Allow clients to control the server through the Control API.
+api: true
+# Address of the Control API listener.
+apiAddress: :9997
+```
+
+The API listens on port `9997` by default. By default it is accessible only from localhost.
+
+## Security
+
+### TLS encryption
+
+Enable HTTPS by generating a self-signed certificate and updating the config:
+
+```bash
+openssl genrsa -out server.key 2048
+openssl req -new -x509 -sha256 -key server.key -out server.crt -days 3650
+```
+
+```yaml mediamtx.yml
+apiEncryption: true
+apiServerKey: server.key
+apiServerCert: server.crt
+```
+
+### CORS and trusted proxies
+
+```yaml mediamtx.yml
+# Allowed CORS origins. Supports wildcards.
+apiAllowOrigins: ['https://dashboard.example.com']
+
+# IPs or CIDRs of proxies placed before the API server.
+# These proxies may set X-Forwarded-For and X-Forwarded-Proto headers.
+apiTrustedProxies: ['10.0.0.0/8']
+```
+
+### Authentication
+
+API access is governed by the same authentication system as the rest of the server. The `api` action controls who may call the API.
+
+With the default internal auth, requests from `127.0.0.1` and `::1` are allowed without credentials. To require credentials from all callers, define a user with the `api` permission:
+
+```yaml mediamtx.yml
+authInternalUsers:
+  - user: admin
+    pass: secret
+    ips: []
+    permissions:
+      - action: api
+```
+
+Then pass credentials in every request:
+
+```bash
+curl -u admin:secret http://localhost:9997/v3/paths/list
+```
+
+<Note>
+When using HTTP or JWT authentication modes, the `api` action is excluded from external auth checks by default (`authHTTPExclude` / `authJWTExclude`). Add it back if you want external validation for API calls.
+</Note>
+
+---
+
+## Endpoints
+
+All endpoints are prefixed with `/v3`. The server base URL is `http://localhost:9997`.
+
+### Server info
+
+<CodeGroup>
+
+```bash GET /v3/info
+curl http://localhost:9997/v3/info
+```
+
+</CodeGroup>
+
+Returns the running version and start time of the server.
+
+---
+
+### Configuration
+
+<CodeGroup>
+
+```bash GET /v3/config/global/get
+curl http://localhost:9997/v3/config/global/get
+```
+
+```bash PATCH /v3/config/global/patch
+curl -X PATCH http://localhost:9997/v3/config/global/patch \
+  -H 'Content-Type: application/json' \
+  -d '{"logLevel": "debug"}'
+```
+
+</CodeGroup>
+
+`PATCH /v3/config/global/patch` applies a partial update — only the fields you include are changed. Changes take effect immediately without a restart.
+
+Manage individual path configurations:
+
+<CodeGroup>
+
+```bash GET /v3/config/paths/list
+curl http://localhost:9997/v3/config/paths/list
+```
+
+```bash GET /v3/config/paths/get/{name}
+curl http://localhost:9997/v3/config/paths/get/mystream
+```
+
+```bash POST /v3/config/paths/add/{name}
+curl -X POST http://localhost:9997/v3/config/paths/add/mystream \
+  -H 'Content-Type: application/json' \
+  -d '{"source": "rtsp://camera.local/stream"}'
+```
+
+```bash DELETE /v3/config/paths/delete/{name}
+curl -X DELETE http://localhost:9997/v3/config/paths/delete/mystream
+```
+
+</CodeGroup>
+
+---
+
+### Active paths
+
+<CodeGroup>
+
+```bash GET /v3/paths/list
+curl http://localhost:9997/v3/paths/list
+```
+
+```bash GET /v3/paths/get/{name}
+curl http://localhost:9997/v3/paths/get/mystream
+```
+
+</CodeGroup>
+
+`/v3/paths/list` returns all active paths including their state, source type, and connected readers. Results are paginated; use the `page` and `itemsPerPage` query parameters to navigate large sets.
+
+---
+
+### RTSP sessions
+
+<CodeGroup>
+
+```bash GET /v3/rtspsessions/list
+curl http://localhost:9997/v3/rtspsessions/list
+```
+
+```bash POST /v3/rtspsessions/kick/{id}
+# Obtain the session ID from /v3/rtspsessions/list first
+curl -X POST http://localhost:9997/v3/rtspsessions/kick/abc123
+```
+
+</CodeGroup>
+
+---
+
+### RTMP connections
+
+<CodeGroup>
+
+```bash GET /v3/rtmpconns/list
+curl http://localhost:9997/v3/rtmpconns/list
+```
+
+```bash POST /v3/rtmpconns/kick/{id}
+curl -X POST http://localhost:9997/v3/rtmpconns/kick/abc123
+```
+
+</CodeGroup>
+
+---
+
+### WebRTC sessions
+
+<CodeGroup>
+
+```bash GET /v3/webrtcsessions/list
+curl http://localhost:9997/v3/webrtcsessions/list
+```
+
+```bash POST /v3/webrtcsessions/kick/{id}
+curl -X POST http://localhost:9997/v3/webrtcsessions/kick/abc123
+```
+
+</CodeGroup>
+
+---
+
+### SRT connections
+
+<CodeGroup>
+
+```bash GET /v3/srtconns/list
+curl http://localhost:9997/v3/srtconns/list
+```
+
+```bash POST /v3/srtconns/kick/{id}
+curl -X POST http://localhost:9997/v3/srtconns/kick/abc123
+```
+
+</CodeGroup>
+
+---
+
+### Recordings
+
+<CodeGroup>
+
+```bash GET /v3/recordings/list
+curl http://localhost:9997/v3/recordings/list
+```
+
+```bash GET /v3/recordings/get/{name}
+curl http://localhost:9997/v3/recordings/get/mystream
+```
+
+```bash DELETE /v3/recordings/deletesegment
+curl -X DELETE \
+  "http://localhost:9997/v3/recordings/deletesegment?path=mystream&start=2024-01-15T10:00:00Z"
+```
+
+</CodeGroup>
+
+`DELETE /v3/recordings/deletesegment` requires `path` and `start` as query parameters. The `start` value is the starting timestamp of the segment as returned by `/v3/recordings/list`.
+
+---
+
+## All available endpoints
+
+<AccordionGroup>
+  <Accordion title="General">
+    | Method | Path | Description |
+    |--------|------|-------------|
+    | `GET` | `/v3/info` | Returns server version and start time |
+    | `POST` | `/v3/auth/jwks/refresh` | Manually refreshes the JWT JWKS |
+  </Accordion>
+  <Accordion title="Configuration">
+    | Method | Path | Description |
+    |--------|------|-------------|
+    | `GET` | `/v3/config/global/get` | Returns the global configuration |
+    | `PATCH` | `/v3/config/global/patch` | Patches the global configuration |
+    | `GET` | `/v3/config/pathdefaults/get` | Returns default path configuration |
+    | `PATCH` | `/v3/config/pathdefaults/patch` | Patches default path configuration |
+    | `GET` | `/v3/config/paths/list` | Lists all configured paths |
+    | `GET` | `/v3/config/paths/get/{name}` | Returns configuration of a specific path |
+    | `POST` | `/v3/config/paths/add/{name}` | Adds a new path |
+    | `PATCH` | `/v3/config/paths/patch/{name}` | Patches a path configuration |
+    | `POST` | `/v3/config/paths/replace/{name}` | Replaces a path configuration |
+    | `DELETE` | `/v3/config/paths/delete/{name}` | Deletes a path |
+  </Accordion>
+  <Accordion title="Active paths and HLS">
+    | Method | Path | Description |
+    |--------|------|-------------|
+    | `GET` | `/v3/paths/list` | Lists all active paths |
+    | `GET` | `/v3/paths/get/{name}` | Returns info about a specific active path |
+    | `GET` | `/v3/hlsmuxers/list` | Lists all HLS muxers |
+    | `GET` | `/v3/hlsmuxers/get/{name}` | Returns info about a specific HLS muxer |
+  </Accordion>
+  <Accordion title="RTSP / RTSPS">
+    | Method | Path | Description |
+    |--------|------|-------------|
+    | `GET` | `/v3/rtspconns/list` | Lists all RTSP connections |
+    | `GET` | `/v3/rtspconns/get/{id}` | Returns a specific RTSP connection |
+    | `GET` | `/v3/rtspsessions/list` | Lists all RTSP sessions |
+    | `GET` | `/v3/rtspsessions/get/{id}` | Returns a specific RTSP session |
+    | `POST` | `/v3/rtspsessions/kick/{id}` | Kicks an RTSP session |
+    | `GET` | `/v3/rtspsconns/list` | Lists all RTSPS connections |
+    | `GET` | `/v3/rtspsconns/get/{id}` | Returns a specific RTSPS connection |
+    | `GET` | `/v3/rtspssessions/list` | Lists all RTSPS sessions |
+    | `GET` | `/v3/rtspssessions/get/{id}` | Returns a specific RTSPS session |
+    | `POST` | `/v3/rtspssessions/kick/{id}` | Kicks an RTSPS session |
+  </Accordion>
+  <Accordion title="RTMP / RTMPS">
+    | Method | Path | Description |
+    |--------|------|-------------|
+    | `GET` | `/v3/rtmpconns/list` | Lists all RTMP connections |
+    | `GET` | `/v3/rtmpconns/get/{id}` | Returns a specific RTMP connection |
+    | `POST` | `/v3/rtmpconns/kick/{id}` | Kicks an RTMP connection |
+    | `GET` | `/v3/rtmpsconns/list` | Lists all RTMPS connections |
+    | `GET` | `/v3/rtmpsconns/get/{id}` | Returns a specific RTMPS connection |
+    | `POST` | `/v3/rtmpsconns/kick/{id}` | Kicks an RTMPS connection |
+  </Accordion>
+  <Accordion title="SRT">
+    | Method | Path | Description |
+    |--------|------|-------------|
+    | `GET` | `/v3/srtconns/list` | Lists all SRT connections |
+    | `GET` | `/v3/srtconns/get/{id}` | Returns a specific SRT connection |
+    | `POST` | `/v3/srtconns/kick/{id}` | Kicks an SRT connection |
+  </Accordion>
+  <Accordion title="WebRTC">
+    | Method | Path | Description |
+    |--------|------|-------------|
+    | `GET` | `/v3/webrtcsessions/list` | Lists all WebRTC sessions |
+    | `GET` | `/v3/webrtcsessions/get/{id}` | Returns a specific WebRTC session |
+    | `POST` | `/v3/webrtcsessions/kick/{id}` | Kicks a WebRTC session |
+  </Accordion>
+  <Accordion title="Recordings">
+    | Method | Path | Description |
+    |--------|------|-------------|
+    | `GET` | `/v3/recordings/list` | Lists all recordings, grouped by path |
+    | `GET` | `/v3/recordings/get/{name}` | Returns recordings for a specific path |
+    | `DELETE` | `/v3/recordings/deletesegment` | Deletes a recording segment |
+  </Accordion>
+</AccordionGroup>
+
+<Note>
+All list endpoints support `page` (default: `0`) and `itemsPerPage` (default: `100`) query parameters for pagination.
+</Note>

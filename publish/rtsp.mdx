@@ -1,0 +1,122 @@
+---
+title: "Publish via RTSP"
+description: "Publish live streams to MediaMTX using the RTSP protocol from clients, IP cameras, and remote servers."
+---
+
+RTSP (Real-Time Streaming Protocol) is the most widely supported protocol for live video streaming. It supports multiple transport layers (UDP, TCP, multicast) and optional TLS encryption (RTSPS). Most IP cameras — particularly those compliant with ONVIF profile S or T — expose an RTSP server that MediaMTX can ingest directly.
+
+**Supported codecs**
+
+| Type | Codecs |
+|---|---|
+| Video | AV1, VP9, VP8, H265, H264, MPEG-4 Video (H263, Xvid), MPEG-1/2 Video, MJPEG |
+| Audio | Opus, MPEG-4 Audio (AAC), MPEG-1/2 Audio (MP3), AC-3, G726, G722, G711 (PCMA, PCMU), LPCM |
+| Other | KLV, MPEG-TS, any RTP-compatible codec |
+
+## RTSP clients
+
+A client connects to MediaMTX and pushes the stream using RTSP. The server listens on port `8554` by default. Publish to:
+
+```
+rtsp://localhost:8554/mystream
+```
+
+The stream becomes available at `/mystream`.
+
+### Publish with FFmpeg
+
+```bash
+ffmpeg -re -stream_loop -1 -i file.mp4 -c copy -f rtsp rtsp://localhost:8554/mystream
+```
+
+### Publish with GStreamer
+
+For a file with both video and audio:
+
+```bash
+gst-launch-1.0 rtspclientsink name=s location=rtsp://localhost:8554/mystream \
+filesrc location=file.mp4 ! qtdemux name=d \
+d.video_0 ! queue ! s.sink_0 \
+d.audio_0 ! queue ! s.sink_1
+```
+
+For video only:
+
+```bash
+gst-launch-1.0 filesrc location=file.mp4 ! qtdemux name=d \
+d.video_0 ! rtspclientsink location=rtsp://localhost:8554/mystream
+```
+
+### Transport options
+
+By default, RTSP negotiates the best transport automatically. You can force a specific transport in your client:
+
+- **UDP** — low overhead, preferred for LAN
+- **TCP** — more reliable over lossy or NAT'd networks
+- **RTSPS** — RTSP over TLS for encrypted streams
+
+Refer to the RTSP-specific features documentation for advanced transport configuration.
+
+### Tools that support RTSP publishing
+
+- [FFmpeg](/publish/tools#ffmpeg)
+- [GStreamer](/publish/tools#gstreamer)
+- [OBS Studio](/publish/tools#obs-studio)
+- [Python and OpenCV](/publish/tools#python-and-opencv)
+
+## RTSP cameras and servers
+
+MediaMTX can connect to an existing RTSP source and pull the stream. This works with IP cameras, encoders, and any RTSP server.
+
+```yaml
+paths:
+  proxied:
+    # URL of the source stream, in the format rtsp://user:pass@host:port/path
+    source: rtsp://original-url
+```
+
+The ingested stream is available at `/proxied`.
+
+### Transport and connection options
+
+You can tune how MediaMTX connects to the source:
+
+```yaml
+paths:
+  proxied:
+    source: rtsp://original-url
+    # Transport protocol: "automatic", "udp", "multicast", or "tcp"
+    rtspTransport: automatic
+    # Allow sources that use random or missing server ports (security risk — use with caution)
+    rtspAnyPort: false
+    # Range header: start streaming from an offset in the recording
+    rtspRangeType:
+    rtspRangeStart:
+    # Source port range for outgoing UDP packets
+    rtspUDPSourcePortRange: [10000, 65535]
+```
+
+<Warning>
+  Enabling `rtspAnyPort` is a security risk. Only use it when connecting to sources that require it and cannot be changed.
+</Warning>
+
+### Multicast sources
+
+Set `rtspTransport: multicast` to receive a stream from a multicast address. MediaMTX will join the multicast group and ingest the stream.
+
+## MPEG-TS inside RTSP
+
+Some RTSP clients wrap all tracks inside a single MPEG-TS payload before sending. This prevents protocol conversion because MediaMTX sees a single opaque track rather than individual video and audio streams.
+
+Enable automatic demuxing with `rtspDemuxMpegts`:
+
+```yaml
+pathDefaults:
+  # Demux MPEG-TS over RTSP into elementary streams.
+  # When enabled, RTSP publishers sending MP2T/90000 will be demultiplexed
+  # and their elementary streams (H.264, H.265, AAC, etc.) exposed as native tracks.
+  # This allows HLS, WebRTC, and other outputs to work transparently with MPEG-TS sources.
+  rtspDemuxMpegts: true
+```
+
+With this enabled, HLS, WebRTC, and other output protocols can consume the stream as normal.

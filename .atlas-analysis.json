@@ -1,0 +1,125 @@
+{
+  "projectType": "infrastructure",
+  "projectName": "MediaMTX",
+  "projectDescription": "A ready-to-use, zero-dependency media server and proxy that routes live video and audio streams across SRT, WebRTC, RTSP, RTMP, HLS, MPEG-TS, and RTP protocols.",
+  "theme": "aspen",
+  "primaryColor": "#3cbce3",
+  "lightColor": "#1c64b4",
+  "darkColor": "#89c4d9",
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Get Started",
+            "pages": [
+              "introduction",
+              "install",
+              "basic-usage"
+            ]
+          },
+          {
+            "group": "Publishing Streams",
+            "pages": [
+              "publish/overview",
+              "publish/srt",
+              "publish/webrtc",
+              "publish/rtsp",
+              "publish/rtmp",
+              "publish/hls-mpeg-ts-rtp",
+              "publish/tools"
+            ]
+          },
+          {
+            "group": "Reading Streams",
+            "pages": [
+              "read/overview",
+              "read/srt",
+              "read/webrtc",
+              "read/rtsp",
+              "read/rtmp",
+              "read/hls",
+              "read/tools"
+            ]
+          },
+          {
+            "group": "Configuration & Features",
+            "pages": [
+              "features/configuration",
+              "features/authentication",
+              "features/record-playback",
+              "features/proxy-forward",
+              "features/always-available",
+              "features/hooks",
+              "features/on-demand-publishing"
+            ]
+          },
+          {
+            "group": "Operations",
+            "pages": [
+              "operations/control-api",
+              "operations/metrics",
+              "operations/performance",
+              "operations/logging"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "API Reference",
+        "groups": [
+          {
+            "group": "Control API",
+            "pages": [
+              "api/overview",
+              "api/configuration",
+              "api/paths",
+              "api/sessions"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "Multi-protocol support: SRT, WebRTC, RTSP, RTMP, HLS, MPEG-TS, RTP",
+    "Automatic protocol conversion between any supported format",
+    "Stream recording to fMP4 or MPEG-TS with configurable retention",
+    "Playback server for recorded streams",
+    "Internal, HTTP, and JWT-based authentication",
+    "Prometheus-compatible metrics endpoint",
+    "RESTful Control API for runtime management",
+    "Hooks (external commands) for connect/disconnect/publish/read events",
+    "On-demand publishing via runOnDemand hooks",
+    "Raspberry Pi Camera native support",
+    "Hot configuration reload without disconnecting clients",
+    "Always-available streams with offline fallback segments",
+    "Zero dependencies, single binary for Linux, Windows, macOS"
+  ],
+  "publicApiSurface": [
+    "GET /v3/config/global/get",
+    "PATCH /v3/config/global/patch",
+    "GET /v3/config/pathdefaults/get",
+    "PATCH /v3/config/pathdefaults/patch",
+    "GET /v3/config/paths/list",
+    "GET /v3/config/paths/get/{name}",
+    "POST /v3/config/paths/add/{name}",
+    "PATCH /v3/config/paths/patch/{name}",
+    "DELETE /v3/config/paths/delete/{name}",
+    "GET /v3/paths/list",
+    "GET /v3/paths/get/{name}",
+    "GET /v3/rtspconns/list",
+    "GET /v3/rtspsessions/list",
+    "POST /v3/rtspsessions/kick/{id}",
+    "GET /v3/rtmpconns/list",
+    "POST /v3/rtmpconns/kick/{id}",
+    "GET /v3/webrtcsessions/list",
+    "POST /v3/webrtcsessions/kick/{id}",
+    "GET /v3/srtconns/list",
+    "POST /v3/srtconns/kick/{id}",
+    "GET /v3/hlsmuxers/list",
+    "GET /v3/recordings/list",
+    "DELETE /v3/recordings/deletesegment"
+  ]
+}

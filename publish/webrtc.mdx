@@ -1,0 +1,74 @@
+---
+title: "Publish via WebRTC"
+description: "Publish live streams to MediaMTX using WebRTC from browsers, WHIP clients, or remote WHEP servers."
+---
+
+WebRTC is a browser-native set of protocols for real-time media exchange. MediaMTX exposes WebRTC publishing via two mechanisms: a built-in browser publish page and the WHIP extension for software clients.
+
+**Supported codecs**
+
+| Type | Codecs |
+|---|---|
+| Video | AV1, VP9, VP8, H265, H264 |
+| Audio | Opus, G722, G711 (PCMA, PCMU) |
+
+## WHIP clients
+
+WHIP (WebRTC-HTTP Ingestion Protocol) is a standardized extension that lets streaming software publish WebRTC streams using a simple HTTP URL — without a web page. If your software supports WHIP, publish to:
+
+```
+http://localhost:8889/mystream/whip
+```
+
+The stream becomes available at `/mystream`.
+
+Tools that support WHIP publishing include [OBS Studio](/publish/tools#obs-studio) (v30+), [FFmpeg](/publish/tools#ffmpeg), [GStreamer](/publish/tools#gstreamer), and [Unity](/publish/tools#unity).
+
+## Browser publishing
+
+Open the built-in publish page in any modern browser:
+
+```
+http://localhost:8889/mystream/publish
+```
+
+The browser captures your camera and microphone and pushes the stream to MediaMTX over WebRTC. The stream becomes available at `/mystream`.
+
+You can embed this page inside another web page using an iframe:
+
+```html
+<iframe src="http://mediamtx-ip:8889/mystream/publish" scrolling="no"></iframe>
+```
+
+For more advanced setups, you can build a custom publish page based on the [source of the built-in publish page](https://github.com/bluenviron/mediamtx/blob/main/internal/servers/webrtc/publish_index.html). A standalone JavaScript class for WebRTC publishing is available in [publisher.js](https://github.com/bluenviron/mediamtx/blob/main/internal/servers/webrtc/publisher.js).
+
+<Note>
+  Not all browsers support every codec. Check the WebRTC-specific features documentation for a codec compatibility table.
+</Note>
+
+## WebRTC servers (WHEP sources)
+
+MediaMTX can pull a stream from a remote WebRTC server that exposes a WHEP endpoint. Configure the source in `mediamtx.yml`:
+
+```yaml
+paths:
+  proxied:
+    # URL in the format whep://host:port/path (HTTP) or wheps:// (HTTPS)
+    source: wheps://host:port/path
+```
+
+If the remote server is another MediaMTX instance, append `/whep` to the stream path (because that suffix is part of the WHEP URL in MediaMTX):
+
+```yaml
+paths:
+  proxied:
+    source: whep://host:port/mystream/whep
+```
+
+## ICE connectivity
+
+WebRTC uses ICE (Interactive Connectivity Establishment) to negotiate a network path between the server and the client. If MediaMTX is behind a NAT or firewall, connections may fail without additional configuration.
+
+<Tip>
+  If you encounter WebRTC connectivity issues, refer to the WebRTC-specific features documentation for guidance on configuring STUN/TURN servers and other ICE options.
+</Tip>

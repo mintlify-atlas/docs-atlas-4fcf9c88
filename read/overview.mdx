@@ -1,0 +1,49 @@
+---
+title: "Reading streams"
+description: "Read live streams from MediaMTX using any supported protocol. Every published stream is available on all protocols simultaneously — no additional configuration required."
+---
+
+Any stream published to MediaMTX is immediately available for reading via all supported protocols at the same time. There is no per-stream protocol configuration. If a stream is available at a path, you can read it via RTSP, RTMP, HLS, WebRTC, or SRT using the default ports.
+
+## Supported protocols
+
+| Protocol | Variants | Default port |
+|----------|----------|-------------|
+| [SRT](/read/srt) | — | `8890` (UDP) |
+| [WebRTC](/read/webrtc) | WHEP | `8889` |
+| [RTSP](/read/rtsp) | UDP, UDP-multicast, TCP, RTSPS | `8554` |
+| [RTMP](/read/rtmp) | RTMP, RTMPS, Enhanced RTMP | `1935` |
+| [HLS](/read/hls) | Low-Latency HLS, fMP4, MPEG-TS | `8888` |
+
+## Supported codecs
+
+| Protocol | Video | Audio | Other |
+|----------|-------|-------|-------|
+| SRT | H265, H264, MPEG-4 Video, MPEG-1/2 Video | Opus, AAC, MP3, AC-3 | KLV |
+| WebRTC | AV1, VP9, VP8, H265, H264 | Opus, G722, G711 (PCMA, PCMU) | KLV |
+| RTSP | AV1, VP9, VP8, H265, H264, MPEG-4 Video, MPEG-1/2 Video, M-JPEG | Opus, AAC, MP3, AC-3, G726, G722, G711, LPCM | KLV, MPEG-TS, any RTP-compatible codec |
+| RTMP | AV1, VP9, H265, H264 | Opus, AAC, MP3, AC-3, G711, LPCM | — |
+| HLS | AV1, VP9, H265, H264 | Opus, AAC | — |
+
+## Read with a specific protocol
+
+<CardGroup cols={2}>
+  <Card title="Read via SRT" icon="satellite-dish" href="/read/srt">
+    Read streams with SRT using FFmpeg or GStreamer. Supports encryption and stream IDs.
+  </Card>
+  <Card title="Read via WebRTC" icon="globe" href="/read/webrtc">
+    Read streams in browsers or with WHEP-compatible clients. Zero-latency delivery.
+  </Card>
+  <Card title="Read via RTSP" icon="video" href="/read/rtsp">
+    Read streams with FFmpeg, GStreamer, VLC, OBS, or any RTSP client.
+  </Card>
+  <Card title="Read via RTMP" icon="circle-play" href="/read/rtmp">
+    Read streams with FFmpeg, VLC, or OBS. Supports RTMPS and Enhanced RTMP.
+  </Card>
+  <Card title="Read via HLS" icon="list-video" href="/read/hls">
+    Read streams in browsers, VLC, or FFmpeg. Supports LL-HLS, fMP4, and MPEG-TS.
+  </Card>
+  <Card title="Reading with popular tools" icon="wrench" href="/read/tools">
+    Step-by-step instructions for FFmpeg, GStreamer, VLC, OBS, Python, Go, Unity, and web browsers.
+  </Card>
+</CardGroup>

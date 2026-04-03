@@ -1,0 +1,136 @@
+---
+title: "Install"
+description: "Install MediaMTX as a standalone binary, Docker image, or platform package."
+---
+
+Choose the installation method that fits your environment:
+
+- **Standalone binary** — use this if you are running Windows, macOS, or you just want to try out MediaMTX
+- **Docker image** — use this if you want to run MediaMTX in an isolated and deterministic way; recommended for production
+- **Arch Linux package** — use this if you are running Arch Linux
+- **FreeBSD package** — use this if you are running FreeBSD
+- **OpenWrt binary** — use this if you are running OpenWrt
+
+## Standalone binary
+
+<Steps>
+  <Step title="Download the binary">
+    Visit the [Releases page](https://github.com/bluenviron/mediamtx/releases) on GitHub and download the archive that matches your operating system and architecture.
+
+    For example, for Linux on amd64:
+
+    ```
+    mediamtx_{version_tag}_linux_amd64.tar.gz
+    ```
+
+    Extract the archive to get the `mediamtx` executable and the default `mediamtx.yml` configuration file.
+  </Step>
+  <Step title="Start the server">
+    On Linux or macOS, run:
+
+    ```bash
+    ./mediamtx
+    ```
+
+    On Windows, double-click `mediamtx.exe` or run it from a terminal.
+  </Step>
+</Steps>
+
+## Docker image
+
+Download and launch the `bluenviron/mediamtx:1` image with the required ports and environment variables:
+
+```bash
+docker run --rm -it \
+  -e MTX_RTSPTRANSPORTS=tcp \
+  -e MTX_WEBRTCADDITIONALHOSTS=192.168.x.x \
+  -p 8554:8554 \
+  -p 1935:1935 \
+  -p 8888:8888 \
+  -p 8889:8889 \
+  -p 8890:8890/udp \
+  -p 8189:8189/udp \
+  bluenviron/mediamtx:1
+```
+
+Set `MTX_WEBRTCADDITIONALHOSTS` to the IP address that clients will use to connect to the server.
+
+<Note>
+  `MTX_RTSPTRANSPORTS=tcp` disables UDP transport for the RTSP server. UDP requires the real source IP and port of incoming packets, which Docker's network stack sometimes replaces. If you need UDP transport, bypass Docker networking with `--network=host` (not available on Windows, macOS, or Kubernetes):
+
+  ```bash
+  docker run --rm -it --network=host bluenviron/mediamtx:1
+  ```
+</Note>
+
+### Image variants
+
+There are four image variants to choose from:
+
+| Image | FFmpeg included | Raspberry Pi Camera support |
+|---|---|---|
+| `bluenviron/mediamtx:1` | No | No |
+| `bluenviron/mediamtx:1-ffmpeg` | Yes | No |
+| `bluenviron/mediamtx:1-rpi` | No | Yes |
+| `bluenviron/mediamtx:1-ffmpeg-rpi` | Yes | Yes |
+
+The `1` tag tracks the latest `1.x.x` release and guarantees backward compatibility on upgrade. To pin to a specific release, use the release name as the tag: `bluenviron/mediamtx:{version_tag}`.
+
+### Custom image
+
+The base image contains only the MediaMTX binary to keep the image size minimal. If you need additional utilities (such as curl, wget, or GStreamer), build a custom image:
+
+<Steps>
+  <Step title="Create a Dockerfile">
+    ```dockerfile
+    FROM bluenviron/mediamtx:1 AS mediamtx
+    FROM ubuntu:24.04
+
+    COPY --from=mediamtx /mediamtx /
+    COPY --from=mediamtx /mediamtx.yml /
+
+    # add anything you need.
+    RUN apt update && apt install -y \
+       gstreamer1.0-tools
+
+    ENTRYPOINT [ "/mediamtx" ]
+    ```
+
+    This uses the official MediaMTX image as a build stage and copies the binary into a full Linux image. Because MediaMTX binaries are not tied to any specific Linux distribution, you can use any base image you prefer.
+  </Step>
+  <Step title="Build the image">
+    ```bash
+    docker build . -t my-mediamtx
+    ```
+  </Step>
+</Steps>
+
+## Arch Linux package
+
+```bash
+git clone https://aur.archlinux.org/mediamtx.git
+cd mediamtx
+makepkg -si
+```
+
+## FreeBSD package
+
+Install via the ports tree or use binary packages (available in 2025Q2 and later):
+
+<CodeGroup>
+
+```bash ports
+cd /usr/ports/multimedia/mediamtx && make install clean
+```
+
+```bash pkg
+pkg install mediamtx
+```
+
+</CodeGroup>
+
+## OpenWrt binary
+
+If your OpenWrt device uses an amd64, armv6, armv7, or arm64 architecture, use the [standalone binary](#standalone-binary) method and download the Linux binary for your architecture.
+
+For other architectures, [compile MediaMTX from source](https://github.com/bluenviron/mediamtx/blob/main/docs/6-misc/1-compile.md).

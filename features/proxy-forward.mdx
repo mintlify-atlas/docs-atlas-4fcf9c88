@@ -1,0 +1,146 @@
+---
+title: "Proxy and forwarding"
+description: "Pull streams from external sources (proxy) and re-publish them to other servers (forwarding)."
+keywords: ["proxy", "forward", "source", "rtsp pull", "rtmp pull", "re-publish", "stream relay"]
+---
+
+MediaMTX supports two related patterns for working with external streams:
+
+- **Proxying** — pull a stream from an external source and make it available to local readers
+- **Forwarding** — take an incoming stream and push it out to another server
+
+## Proxying (pulling from external sources)
+
+Set the `source` field on a path to a URL. MediaMTX will connect to that source and expose the stream locally.
+
+```yaml
+paths:
+  my_camera:
+    source: rtsp://192.168.1.100:554/stream
+```
+
+Any client connecting to `rtsp://localhost:8554/my_camera` will receive the stream from the external camera.
+
+### Supported source URL formats
+
+| Format | Description |
+|---|---|
+| `rtsp://` | RTSP over TCP/UDP |
+| `rtsps://` | RTSP with TLS |
+| `rtsp+http://` | RTSP with HTTP tunneling |
+| `rtsps+http://` | RTSP with HTTPS tunneling |
+| `rtsp+ws://` | RTSP with WebSocket tunneling |
+| `rtsps+ws://` | RTSP with secure WebSocket tunneling |
+| `rtmp://` | RTMP |
+| `rtmps://` | RTMP with TLS |
+| `http://.../stream.m3u8` | HLS |
+| `https://.../stream.m3u8` | HLS with TLS |
+| `udp+mpegts://ip:port` | MPEG-TS over UDP (listen) |
+| `unix+mpegts://socket` | MPEG-TS over Unix socket |
+| `udp+rtp://ip:port` | RTP over UDP (listen) |
+| `srt://` | SRT |
+| `whep://` | WebRTC via HTTP+WHEP |
+| `wheps://` | WebRTC via HTTPS+WHEP |
+| `redirect` | Redirect clients to another path or server |
+| `rpiCamera` | Raspberry Pi Camera Module |
+
+### On-demand proxying
+
+By default, MediaMTX connects to the source as soon as the server starts. Set `sourceOnDemand: true` to connect only when a reader requests the path:
+
+```yaml
+paths:
+  my_camera:
+    source: rtsp://192.168.1.100:554/stream
+    sourceOnDemand: true
+    sourceOnDemandStartTimeout: 10s
+    sourceOnDemandCloseAfter: 10s
+```
+
+| Setting | Default | Description |
+|---|---|---|
+| `sourceOnDemand` | `false` | Connect only when a reader requests the stream |
+| `sourceOnDemandStartTimeout` | `10s` | How long to wait for the source to start before rejecting readers |
+| `sourceOnDemandCloseAfter` | `10s` | How long to keep the source open after the last reader disconnects |
+
+### Self-signed TLS certificates
+
+If the source uses a self-signed certificate, provide its fingerprint:
+
+```yaml
+paths:
+  my_camera:
+    source: rtsps://192.168.1.100:554/stream
+    sourceFingerprint: 33949e05fffb5ff3e8aa16f8213a6251b4d9363804ba53233c4da9a46d6f2739
+```
+
+Obtain the fingerprint with:
+
+```bash
+openssl s_client -connect source_ip:source_port </dev/null 2>/dev/null \
+  | sed -n '/BEGIN/,/END/p' > server.crt
+openssl x509 -in server.crt -noout -fingerprint -sha256 \
+  | cut -d "=" -f2 | tr -d ':'
+```
+
+### Dynamic source URLs with regex groups
+
+When a path name is a regular expression, use `$G1`, `$G2`, etc., in the source URL to reference capture groups. This lets you map many paths to a single rule:
+
+```yaml
+paths:
+  "~^proxy_(.+)$":
+    source: rtsp://other-server:8554/$G1
+    sourceOnDemand: true
+```
+
+A request to `rtsp://localhost:8554/proxy_stream1` will be proxied from `rtsp://other-server:8554/stream1`, and so on.
+
+---
+
+## Forwarding (pushing to other servers)
+
+To forward an incoming stream to another server, use the `runOnReady` hook to start FFmpeg when the stream becomes available. FFmpeg reads from the local MediaMTX RTSP endpoint and re-publishes to the destination.
+
+```yaml
+pathDefaults:
+  runOnReady: >
+    ffmpeg -i rtsp://localhost:$RTSP_PORT/$MTX_PATH
+    -c copy
+    -f rtsp rtsp://other-server:8554/another-path
+  runOnReadyRestart: true
+```
+
+| Variable | Description |
+|---|---|
+| `$RTSP_PORT` | The RTSP port MediaMTX is listening on (default `8554`) |
+| `$MTX_PATH` | The name of the current path |
+
+Setting `runOnReadyRestart: true` ensures FFmpeg is restarted automatically if it exits unexpectedly.
+
+### Forwarding to multiple destinations
+
+Run multiple FFmpeg instances or use FFmpeg's tee muxer:
+
+```yaml
+paths:
+  live:
+    runOnReady: >
+      ffmpeg -i rtsp://localhost:$RTSP_PORT/$MTX_PATH
+      -c copy -f rtsp rtsp://server-a:8554/stream
+      -c copy -f rtsp rtsp://server-b:8554/stream
+    runOnReadyRestart: true
+```
+
+### Forwarding to RTMP (e.g. YouTube Live, Twitch)
+
+```yaml
+paths:
+  live:
+    runOnReady: >
+      ffmpeg -i rtsp://localhost:$RTSP_PORT/$MTX_PATH
+      -c:v libx264 -preset veryfast -b:v 3000k
+      -c:a aac -b:a 128k
+      -f flv rtmp://live.twitch.tv/live/YOUR_STREAM_KEY
+    runOnReadyRestart: true
+```

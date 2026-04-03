@@ -1,0 +1,173 @@
+---
+title: "Configuration"
+description: "Configure MediaMTX using the mediamtx.yml file, environment variables, or the Control API."
+keywords: ["configuration", "mediamtx.yml", "environment variables", "hot reload", "path settings"]
+---
+
+MediaMTX is configured through a YAML file (`mediamtx.yml`). All available parameters are documented with comments directly in the configuration file. You can change configuration in three ways: by editing the file, through environment variables, or via the [Control API](/operations/control-api).
+
+## Configuration file location
+
+The configuration file is included in the release bundle. When using Docker, it is located at `/mediamtx.yml` inside the container. You can mount your own copy:
+
+```bash
+docker run --rm -it --network=host \
+  -v "$PWD/mediamtx.yml:/mediamtx.yml:ro" \
+  bluenviron/mediamtx:1
+```
+
+## File structure
+
+The configuration file has three top-level sections:
+
+```yaml
+# Global settings — applied everywhere
+logLevel: info
+readTimeout: 10s
+writeTimeout: 10s
+writeQueueSize: 512
+
+# Default path settings — applied to all paths unless overridden
+pathDefaults:
+  record: false
+  recordFormat: fmp4
+  source: publisher
+
+# Per-path settings — override pathDefaults for specific paths
+paths:
+  my_camera:
+    source: rtsp://192.168.1.100:554/stream
+```
+
+### Global settings
+
+Global settings control server-wide behavior.
+
+| Setting | Default | Description |
+|---|---|---|
+| `logLevel` | `info` | Verbosity: `error`, `warn`, `info`, `debug` |
+| `logDestinations` | `[stdout]` | Where logs go: `stdout`, `file`, `syslog` |
+| `logFile` | `mediamtx.log` | Log file path (when `file` is in `logDestinations`) |
+| `readTimeout` | `10s` | Timeout for read operations |
+| `writeTimeout` | `10s` | Timeout for write operations |
+| `writeQueueSize` | `512` | Outgoing packet queue size. Higher values increase throughput; lower values save RAM |
+| `udpMaxPayloadSize` | `1452` | Maximum UDP payload size in bytes |
+
+```yaml
+logLevel: info
+logDestinations: [stdout]
+readTimeout: 10s
+writeTimeout: 10s
+writeQueueSize: 512
+```
+
+### pathDefaults
+
+Settings in `pathDefaults` are applied to every path unless overridden in `paths`. This is the right place to set defaults that apply globally across all streams.
+
+```yaml
+pathDefaults:
+  record: false
+  recordFormat: fmp4
+  recordSegmentDuration: 1h
+  recordDeleteAfter: 1d
+  source: publisher
+  sourceOnDemand: false
+  maxReaders: 0
+```
+
+### paths
+
+Settings in `paths` apply to specific named paths and override any matching `pathDefaults` values. The key is the path name.
+
+```yaml
+paths:
+  live:
+    record: true
+    recordDeleteAfter: 7d
+
+  my_camera:
+    source: rtsp://192.168.1.100:554/stream
+    sourceOnDemand: true
+```
+
+## Path name patterns
+
+Path names support regular expressions when prefixed with `~`. Use `$G1`, `$G2`, etc., to reference capture groups in other settings.
+
+```yaml
+paths:
+  # Match any path starting with "cam_"
+  "~^cam_(.+)$":
+    source: rtsp://camera-server:8554/$G1
+    sourceOnDemand: true
+
+  # Exact match
+  my_live_stream:
+    record: true
+
+  # Fallback for paths not matching any other entry
+  all_others:
+    record: false
+```
+
+<Tip>
+  The special key `all_others` matches any path that does not match another entry. Use it to set defaults for unmatched paths.
+</Tip>
+
+## Hot reloading
+
+You can change the configuration file while the server is running. MediaMTX detects changes and applies them without disconnecting existing clients, wherever possible.
+
+## Environment variable overrides
+
+Any configuration parameter can be overridden with an environment variable using the format `MTX_<UPPERCASEPARAMNAME>`.
+
+```bash
+# Override a simple value
+MTX_LOGLEVEL=debug ./mediamtx
+
+# Override the RTSP listen address
+MTX_RTSPADDRESS=127.0.0.1:8554 ./mediamtx
+```
+
+Array values are set as comma-separated lists:
+
+```bash
+MTX_RTSPTRANSPORTS=tcp,udp ./mediamtx
+```
+
+Nested map keys use underscores to separate levels:
+
+```bash
+MTX_PATHS_MYCAMERA_SOURCE=rtsp://192.168.1.100:554/stream ./mediamtx
+```
+
+List items use their zero-based index as an extra key. This is useful for setting credentials without storing them in the configuration file:
+
+```bash
+MTX_AUTHINTERNALUSERS_0_USER=myuser \
+MTX_AUTHINTERNALUSERS_0_PASS=mypassword \
+./mediamtx
+```
+
+With Docker, pass environment variables using `-e`:
+
+```bash
+docker run --rm -it --network=host \
+  -e MTX_LOGLEVEL=debug \
+  -e MTX_PATHS_MYCAM_SOURCE=rtsp://192.168.1.100:554/stream \
+  bluenviron/mediamtx:1
+```
+
+## Encrypted configuration
+
+The configuration file can be encrypted using the `crypto_secretbox` function from the NaCL library. After encrypting and base64-encoding the file, launch the server with the `MTX_CONFKEY` environment variable:
+
+```bash
+MTX_CONFKEY=mykey ./mediamtx
+```
+
+<Note>
+  An online tool for encrypting the configuration is available at [play.golang.org](https://play.golang.org/p/rX29jwObNe4).
+</Note>

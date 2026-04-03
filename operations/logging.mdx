@@ -1,0 +1,163 @@
+---
+title: "Logging"
+description: "Configure log verbosity, destinations, structured output, and log rotation in MediaMTX."
+keywords: ["logging", "log level", "structured logs", "syslog", "jsonl", "log rotation"]
+---
+
+MediaMTX writes log messages to one or more destinations. You can control verbosity, output format, and where messages are sent through a handful of configuration options.
+
+## Log level
+
+```yaml mediamtx.yml
+# Verbosity of the program.
+# Available values are "error", "warn", "info", "debug".
+logLevel: info
+```
+
+| Level | What is logged |
+|-------|---------------|
+| `error` | Unrecoverable errors only |
+| `warn` | Errors and warnings |
+| `info` | Normal operational events (connections, stream state changes) |
+| `debug` | Detailed internal events, including every packet decision |
+
+<Warning>
+`debug` produces a high volume of output and can itself become a performance bottleneck under heavy load. Use it only for short-term diagnostics.
+</Warning>
+
+---
+
+## Log destinations
+
+Log entries can be sent to any combination of `stdout`, `file`, and `syslog`:
+
+```yaml mediamtx.yml
+# Destinations of log messages.
+# Available values are "stdout", "file" and "syslog".
+logDestinations: [stdout]
+```
+
+You can specify multiple destinations at once:
+
+```yaml mediamtx.yml
+logDestinations: [stdout, file]
+```
+
+### Writing to a file
+
+```yaml mediamtx.yml
+logDestinations: [file]
+# Path of the log file.
+logFile: mediamtx.log
+```
+
+### Writing to syslog
+
+```yaml mediamtx.yml
+logDestinations: [syslog]
+# Prefix used to identify MediaMTX entries in the system log.
+sysLogPrefix: mediamtx
+```
+
+Query syslog entries:
+
+```bash
+journalctl SYSLOG_IDENTIFIER=mediamtx
+```
+
+If MediaMTX is running as a systemd service, you can also use:
+
+```bash
+journalctl -u mediamtx
+```
+
+---
+
+## Structured logging
+
+By default, log lines are human-readable plain text. Enable JSONL (newline-delimited JSON) output to make logs parseable by collectors like Loki, Logstash, CloudWatch, and Fluentd:
+
+```yaml mediamtx.yml
+# Emit logs in structured format (JSONL).
+# Applies when destination is "stdout" or "file".
+logStructured: true
+```
+
+Example structured output:
+
+```json
+{"timestamp":"2024-01-15T10:45:05.999999999+01:00","level":"INF","message":"[RTSP] listener opened on :8554 (TCP), :8000 (UDP/RTP), :8001 (UDP/RTCP)"}
+{"timestamp":"2024-01-15T10:45:05.999999999+01:00","level":"INF","message":"[RTMP] listener opened on :1935"}
+{"timestamp":"2024-01-15T10:45:05.999999999+01:00","level":"INF","message":"[HLS] listener opened on :8888"}
+{"timestamp":"2024-01-15T10:45:05.999999999+01:00","level":"INF","message":"[WebRTC] listener opened on :8889 (HTTP), :8189 (ICE/UDP)"}
+{"timestamp":"2024-01-15T10:45:05.999999999+01:00","level":"INF","message":"[SRT] listener opened on :8890 (UDP)"}
+```
+
+Each entry has three fields: `timestamp` (RFC3339Nano), `level` (`ERR`, `WRN`, `INF`, or `DBG`), and `message`.
+
+<Tip>
+Use structured logging whenever logs flow into a centralized collector. JSONL is simpler to parse reliably than regex-matching plain text, especially when messages contain variable content.
+</Tip>
+
+---
+
+## Packet debugging
+
+```yaml mediamtx.yml
+# Dump packets to disk. This is useful for debugging.
+dumpPackets: false
+```
+
+When `dumpPackets` is set to `true`, MediaMTX writes raw packet data to disk. This is intended for diagnosing codec or muxing issues and generates a large amount of data quickly.
+
+<Warning>
+Only enable `dumpPackets` temporarily during active debugging. It will consume disk space rapidly and should never be left on in production.
+</Warning>
+
+---
+
+## Log file rotation
+
+The log file does not rotate automatically. Use `logrotate` or a similar tool to manage retention.
+
+Create `/etc/logrotate.d/mediamtx`:
+
+```
+/path/to/mediamtx.log {
+    daily
+    copytruncate
+    rotate 7
+    compress
+    delaycompress
+    missingok
+    notifempty
+}
+```
+
+This rotates the file daily, keeps 7 compressed copies, and uses `copytruncate` so MediaMTX does not need to be signaled or restarted when the file is rotated.
+
+Rotated files follow the naming pattern:
+
+```
+mediamtx.log
+mediamtx.log.1
+mediamtx.log.2
+...
+```
+
+<Tip>
+Prefer writing to `syslog` or `stdout` (for container log drivers) over `file` in production environments. This delegates rotation and retention management to the host's existing log infrastructure.
+</Tip>
+
+---
+
+## Configuration reference
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `logLevel` | `info` | Verbosity: `error`, `warn`, `info`, `debug` |
+| `logDestinations` | `[stdout]` | One or more of: `stdout`, `file`, `syslog` |
+| `logStructured` | `false` | Emit JSONL instead of plain text (stdout and file only) |
+| `logFile` | `mediamtx.log` | Path to the log file when `file` is in `logDestinations` |
+| `sysLogPrefix` | `mediamtx` | Identifier prefix used when writing to syslog |
+| `dumpPackets` | `false` | Write raw packets to disk for debugging |
